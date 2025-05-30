@@ -1,88 +1,151 @@
-# Meeting Analyzer Chatbot
+# Meeting Analyzer & Chatbot
 
-This application allows you to upload an audio file of a meeting, and it will:
-1.  Transcribe the audio.
-2.  Generate meeting takeaways.
-3.  Provide a summary of the meeting.
-4.  Create meeting notes.
-5.  Allow you to ask questions about the meeting content.
+A full-stack application for transcribing and analyzing meeting audio files using Google Gemini AI. The application features a modern Angular frontend and a Flask backend API.
 
-## Setup
+## 🌟 Features
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd <repository-name>
-    ```
+- **Audio Transcription**: Upload audio files and get accurate transcriptions with chapter organization
+- **AI-Powered Analysis**: Automatically generate meeting summaries, key takeaways, and detailed notes
+- **Interactive Chat**: Ask questions about the meeting content using AI
+- **Search Functionality**: Search within transcripts with real-time highlighting
+- **Modern UI**: Beautiful, responsive interface built with Angular Material
+- **Multiple Format Support**: MP3, WAV, M4A, FLAC, AAC, OGG, OPUS, WEBM
 
-2.  **Create a virtual environment and activate it:**
-    ```bash
-    python -m venv venv
-    # On Windows
-    venv\Scripts\activate
-    # On macOS/Linux
-    source venv/bin/activate
-    ```
+## 📸 Screenshot
 
-3.  **Install the dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+The application features a clean, modern interface with:
+- Drag-and-drop file upload
+- Tabbed interface for different views (Transcript, Takeaways, Summary, Notes, Chat)
+- Chapter-based transcript organization
+- Real-time search with highlighting
+- Interactive chat interface
 
-4.  **Set up authentication:**
+## 🏗️ Architecture
 
-    **Option A: Using Google AI API Key (Recommended for simplicity)**
-    
-    Create a `.env` file in the root of the project and add:
-    ```env
-    GOOGLE_API_KEY="your-google-ai-api-key"
-    ```
-    Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey).
+The project consists of two main components:
 
-    **Option B: Using Google Cloud Vertex AI (Enterprise/Production)**
-    
-    Create a `.env` file in the root of the project and add:
-    ```env
-    GOOGLE_CLOUD_PROJECT="YOUR_GOOGLE_CLOUD_PROJECT_ID"
-    GOOGLE_CLOUD_LOCATION="your-google-cloud-location" # e.g., "us-central1" or "global"
-    # Optional: Use a Service Account JSON key file
-    # GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-key.json"
-    ```
+### Backend (Flask API)
+- RESTful API endpoints for audio processing
+- Integration with Google Gemini AI for transcription and analysis
+- Session management for chat functionality
+- CORS-enabled for frontend communication
 
-    **For Vertex AI setup, you'll also need:**
-    - Enable the Vertex AI API and Cloud Storage API in your Google Cloud project
-    - The application will automatically create a temporary Cloud Storage bucket for audio file uploads (required for Vertex AI)
-    - Ensure your service account has permissions for both Vertex AI and Cloud Storage
+### Frontend (Angular)
+- Single-page application with Angular 19
+- Material Design components
+- Responsive layout
+- Real-time updates and interactions
 
-    **Authentication Methods for Vertex AI:**
+## 🚀 Getting Started
 
-    *   **For local development:** Use Application Default Credentials (ADC) by running:
-        ```bash
-        gcloud auth application-default login
-        ```
+### Prerequisites
 
-    *   **For production/CI/CD:** Use a Service Account JSON key file:
-        1.  Create a service account and download its JSON key file from the Google Cloud Console (IAM & Admin > Service Accounts). Ensure the service account has appropriate permissions (e.g., Vertex AI User, Storage Admin).
-        2.  Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the absolute path of this JSON file in your `.env` file.
+- Python 3.8+
+- Node.js 18+
+- npm 9+
+- Google Cloud API credentials with Gemini AI access
 
-    Refer to the [Google Cloud Vertex AI documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash) for more details on setting up Vertex AI authentication and enabling necessary APIs.
+### Backend Setup
 
-5.  **Run the application:**
-    ```bash
-    streamlit run app.py
-    ```
+1. Navigate to the backend directory:
+```bash
+cd backend
+```
 
-## Usage
+2. Create a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+```
 
-1.  Open your browser and go to the URL provided by Streamlit (usually `http://localhost:8501`).
+3. Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
-2.  Upload your audio file (supported formats: MP3, WAV, M4A, FLAC, AAC, OGG, OPUS, WEBM).
+4. Set up environment variables:
+   - Create a `.env` file in the backend directory
+   - Add your Google API key: `GOOGLE_API_KEY=your_api_key_here`
 
-3.  Click "Process Meeting Audio" to start transcription and analysis.
+5. Run the Flask server:
+```bash
+python api.py
+```
 
-4.  The application will display the transcription, takeaways, summary, and notes in separate tabs.
+The API will be available at `http://localhost:5000`
 
-5.  Navigate to the "Chat about the Meeting" tab to ask questions about the uploaded meeting.
+### Frontend Setup
 
-## Model Used
-This application uses `gemini-2.5-flash` for all generative tasks. The transcription uses the Google Gemini API directly, while the LangChain integration uses `ChatGoogleGenerativeAI` for generating summaries, takeaways, notes, and chat responses. 
+1. Navigate to the frontend directory:
+```bash
+cd frontend
+```
+
+2. Install dependencies:
+```bash
+npm install
+```
+
+3. Start the development server:
+```bash
+npm start
+```
+
+The application will be available at `http://localhost:4200`
+
+## 📁 Project Structure
+
+```
+transcriber/
+├── backend/
+│   ├── api.py              # Flask API endpoints
+│   ├── transcription.py    # Audio transcription logic
+│   ├── llm_utils.py        # AI integration utilities
+│   ├── requirements.txt    # Python dependencies
+│   └── README.md
+├── frontend/
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── meeting-analyzer/   # Main component
+│   │   │   └── services/           # API services
+│   │   └── styles.css
+│   ├── package.json
+│   └── README.md
+└── README.md
+```
+
+## 🔌 API Endpoints
+
+- `POST /api/transcribe` - Upload and transcribe audio files
+- `POST /api/chat` - Send chat messages about the meeting
+- `GET /api/chat/history/:sessionId` - Get chat history
+- `POST /api/search` - Search within transcripts
+- `GET /api/health` - Check API status
+
+## 🛠️ Technologies Used
+
+### Backend
+- Flask
+- Google Vertex AI (Gemini)
+- LangChain
+- Python-dotenv
+
+### Frontend
+- Angular 19
+- Angular Material
+- TypeScript
+- RxJS
+- HTML5/CSS3
+
+## 📝 Usage
+
+1. Start both backend and frontend servers
+2. Open http://localhost:4200 in your browser
+3. Upload an audio file by dragging and dropping or clicking the upload button
+4. Wait for the processing to complete
+5. Explore the different tabs:
+   - **Transcript**: View the full transcription with chapters
+   - **Takeaways**: See key points from the meeting
+   - **Summary**: Read a concise summary
+   - **Notes**: View detailed meeting notes
+   - **Chat**: Ask questions about the meeting

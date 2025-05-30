@@ -3,4 +3,7 @@ google-generativeai
 google-cloud-storage
 langchain
 langchain-google-genai
-python-dotenv 
+python-dotenv
+pydub
+flask
+flask-cors 

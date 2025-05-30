@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_google_vertexai import ChatVertexAI
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain.chains import LLMChain
@@ -8,43 +8,31 @@ from langchain.memory import ConversationBufferMemory
 
 load_dotenv()
 
-# For ChatGoogleGenerativeAI, we can use either:
-# 1. GOOGLE_API_KEY environment variable (for direct Google AI API)
-# 2. Or the same Vertex AI setup with GOOGLE_CLOUD_PROJECT if we want to use Vertex AI through this integration
-# The ChatGoogleGenerativeAI should automatically detect and use the appropriate authentication method
+# For ChatVertexAI, we use Vertex AI with service account authentication
+# Set GOOGLE_APPLICATION_CREDENTIALS environment variable to point to your service account JSON file
+# and GOOGLE_CLOUD_PROJECT to your GCP project ID
 
-# Check if we have the necessary environment variables
-google_api_key = os.getenv("GOOGLE_API_KEY")
+# Check if we have the necessary environment variables for Vertex AI
 google_cloud_project = os.getenv("GOOGLE_CLOUD_PROJECT")
 
-if not google_api_key and not google_cloud_project:
+if not google_cloud_project:
     raise EnvironmentError(
-        "Either GOOGLE_API_KEY (for Google AI API) or GOOGLE_CLOUD_PROJECT (for Vertex AI) environment variable must be set. "
-        "ChatGoogleGenerativeAI requires one of these for authentication."
+        "GOOGLE_CLOUD_PROJECT environment variable must be set for ChatVertexAI. "
+        "Also ensure GOOGLE_APPLICATION_CREDENTIALS points to your service account JSON file."
     )
 
-# Initialize the ChatGoogleGenerativeAI model
-# Using gemini-2.5-flash as requested by the user.
+# Initialize the ChatVertexAI model
+# Using gemini-1.5-flash-001 (a stable Vertex AI model)
 # Temperature is set to a low value for more deterministic outputs for summaries/notes,
 # but can be adjusted or made configurable.
 
-# If we have a Google API key, use it directly. Otherwise, rely on Vertex AI setup.
-if google_api_key:
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-preview-05-20", 
-        temperature=0.2, 
-        google_api_key=google_api_key
-    )
-    print("Using ChatGoogleGenerativeAI with Google AI API key")
-else:
-    # Use Vertex AI authentication (ADC or service account)
-    llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-flash-preview-05-20", 
-        temperature=0.2,
-        project=google_cloud_project,
-        location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
-    )
-    print("Using ChatGoogleGenerativeAI with Vertex AI authentication")
+llm = ChatVertexAI(
+    model="gemini-2.5-flash-preview-05-20", 
+    temperature=0.2,
+    project=google_cloud_project,
+    location=os.getenv("GOOGLE_CLOUD_LOCATION", "us-central1")
+)
+print("Using ChatVertexAI with service account authentication")
 
 def generate_meeting_takeaways(transcript: str) -> str:
     """Generates concise meeting takeaways from the transcript."""

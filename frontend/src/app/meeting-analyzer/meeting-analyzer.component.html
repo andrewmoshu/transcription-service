@@ -1,0 +1,270 @@
+<div class="meeting-analyzer-container">
+  <!-- File Upload View -->
+  <div class="upload-view" *ngIf="!transcript">
+    <div class="upload-container">
+      <!-- Logo and Header -->
+      <div class="upload-header">
+        <div class="logo-wrapper">
+          <div class="logo-circle">
+            <mat-icon class="logo-icon">graphic_eq</mat-icon>
+          </div>
+        </div>
+        <h1 class="app-title">Meeting Analyzer</h1>
+        <p class="app-subtitle">Transform your audio into actionable insights with AI</p>
+      </div>
+      
+      <!-- Upload Card -->
+      <div class="upload-card">
+        <div 
+          class="upload-zone"
+          [class.dragging]="isDragging"
+          [class.has-file]="selectedFile"
+          (dragover)="onDragOver($event)"
+          (dragleave)="onDragLeave($event)"
+          (drop)="onDrop($event)"
+        >
+          <input 
+            type="file" 
+            #fileInput 
+            (change)="onFileSelected($event)"
+            accept=".mp3,.wav,.m4a,.flac,.aac,.ogg,.opus,.webm"
+            style="display: none;"
+          >
+          
+          <!-- Default State -->
+          <div class="upload-content" *ngIf="!selectedFile">
+            <div class="upload-icon-wrapper">
+              <mat-icon class="upload-icon">cloud_upload</mat-icon>
+              <div class="upload-icon-bg"></div>
+            </div>
+            
+            <h2 class="upload-title">Drop your audio file here</h2>
+            <p class="upload-description">or click to browse from your computer</p>
+            
+            <button mat-stroked-button class="browse-button" (click)="fileInput.click()">
+              Browse Files
+            </button>
+            
+            <div class="file-info">
+              <mat-icon class="info-icon">info_outline</mat-icon>
+              <span>Supports MP3, WAV, M4A, FLAC, AAC, OGG, OPUS, WEBM • Max 100MB</span>
+            </div>
+          </div>
+
+          <!-- File Selected State -->
+          <div class="file-selected" *ngIf="selectedFile">
+            <div class="file-icon-wrapper">
+              <mat-icon class="file-icon">audiotrack</mat-icon>
+            </div>
+            
+            <div class="file-details">
+              <h3 class="file-name">{{ filename }}</h3>
+              <p class="file-size">{{ getFileSize(selectedFile) }}</p>
+            </div>
+            
+            <button mat-icon-button class="remove-button" (click)="selectedFile = null; filename = ''">
+              <mat-icon>close</mat-icon>
+            </button>
+          </div>
+        </div>
+        
+        <!-- Process Button -->
+        <button 
+          mat-flat-button 
+          class="process-button"
+          [class.ready]="selectedFile && !isProcessing"
+          (click)="processAudio()"
+          [disabled]="!selectedFile || isProcessing"
+        >
+          <mat-icon *ngIf="!isProcessing">{{ selectedFile ? 'play_arrow' : 'cloud_upload' }}</mat-icon>
+          <mat-spinner *ngIf="isProcessing" diameter="20" class="process-spinner"></mat-spinner>
+          <span>{{ getProcessButtonText() }}</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content View -->
+  <div class="main-content" *ngIf="transcript && !isProcessing">
+    <!-- Left Panel - Note Section -->
+    <div class="left-panel">
+      <div class="note-header">
+        <div class="file-info">
+          <div class="user-info">
+            <mat-icon class="file-type-icon">description</mat-icon>
+            <span class="filename">{{ filename }}</span>
+          </div>
+          <div class="file-meta">
+            <span class="timestamp">{{ processedTime | date:'MMM d \'at\' h:mm a - E' }}</span>
+            <span class="duration">
+              <mat-icon>schedule</mat-icon>
+              {{ duration }}
+            </span>
+            <button mat-icon-button [matMenuTriggerFor]="menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="downloadTranscript()">
+                <mat-icon>download</mat-icon>
+                <span>Download Transcript</span>
+              </button>
+              <button mat-menu-item (click)="selectedFile = null; transcript = ''">
+                <mat-icon>upload_file</mat-icon>
+                <span>New Upload</span>
+              </button>
+            </mat-menu>
+          </div>
+        </div>
+      </div>
+
+      <mat-tab-group class="content-tabs">
+        <!-- Summary Tab -->
+        <mat-tab label="Summary">
+          <div class="tab-content">
+            <div class="summary-content">
+              <div class="content-section" *ngIf="summaryHtml">
+                <div class="markdown-content" [innerHTML]="summaryHtml"></div>
+              </div>
+
+              <div class="content-section" *ngIf="takeawaysHtml">
+                <h3>Key Takeaways</h3>
+                <div class="markdown-content" [innerHTML]="takeawaysHtml"></div>
+              </div>
+
+              <div class="content-section" *ngIf="notesHtml">
+                <h3>Action Items</h3>
+                <div class="action-items">
+                  <div class="markdown-content" [innerHTML]="notesHtml"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </mat-tab>
+
+        <!-- Transcript Tab -->
+        <mat-tab label="Transcript">
+          <div class="tab-content">
+            <div class="search-bar">
+              <mat-form-field appearance="outline" class="search-field">
+                <input 
+                  matInput 
+                  [(ngModel)]="searchTerm" 
+                  (keyup.enter)="searchTranscript()"
+                  placeholder="Search in transcript..."
+                >
+                <mat-icon matPrefix>search</mat-icon>
+                <button 
+                  mat-icon-button 
+                  matSuffix 
+                  (click)="searchTerm = ''; searchTranscript()"
+                  *ngIf="searchTerm"
+                >
+                  <mat-icon>clear</mat-icon>
+                </button>
+              </mat-form-field>
+            </div>
+
+            <div class="transcript-content">
+              <mat-accordion>
+                <mat-expansion-panel 
+                  *ngFor="let chapter of filteredChapters; let i = index"
+                  [expanded]="i === 0 || searchTerm !== ''"
+                  class="chapter-panel"
+                >
+                  <mat-expansion-panel-header>
+                    <mat-panel-title>
+                      <span [innerHTML]="highlightSearchTerm(chapter.title)"></span>
+                    </mat-panel-title>
+                    <mat-panel-description>
+                      <mat-icon>schedule</mat-icon>
+                      {{ chapter.time_range }}
+                    </mat-panel-description>
+                  </mat-expansion-panel-header>
+                  
+                  <div class="chapter-text">
+                    <p 
+                      *ngFor="let line of chapter.content.split('\n')" 
+                      class="transcript-line"
+                      [innerHTML]="formatTranscriptLineWithMarkdown(line)"
+                    ></p>
+                  </div>
+                </mat-expansion-panel>
+              </mat-accordion>
+            </div>
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </div>
+
+    <!-- Right Panel - Chat Section -->
+    <div class="right-panel">
+      <div class="chat-section">
+        <div class="chat-header">
+          <h3>Chat</h3>
+        </div>
+        
+        <div class="chat-container">
+          <div class="messages-area">
+            <div *ngIf="chatMessages.length === 0 && !isSendingMessage" class="chat-empty-state">
+              <div class="empty-message">
+                <mat-icon>chat_bubble_outline</mat-icon>
+                <div class="empty-title">No messages yet</div>
+                <div class="empty-instructions">
+                  Start the conversation by asking a question about your meeting or transcript.
+                </div>
+              </div>
+            </div>
+            <div 
+              *ngFor="let message of chatMessages" 
+              class="message-item"
+            >
+              <div class="message-avatar">
+                <mat-icon>{{ message.role === 'user' ? 'account_circle' : 'smart_toy' }}</mat-icon>
+              </div>
+              <div class="message-content">
+                <div class="message-header">
+                  <span class="sender-name">{{ message.role === 'user' ? 'You' : 'AI Assistant' }}</span>
+                  <span class="message-time">{{ message.timestamp | date:'h:mm a' }}</span>
+                </div>
+                <div class="message-text">{{ message.content }}</div>
+              </div>
+            </div>
+
+            <div *ngIf="isSendingMessage" class="message-item">
+              <div class="message-avatar">
+                <mat-icon>smart_toy</mat-icon>
+              </div>
+              <div class="message-content">
+                <div class="typing-indicator">
+                  <span></span>
+                  <span></span>
+                  <span></span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="chat-input-container">
+            <mat-form-field appearance="outline" class="chat-input">
+              <input 
+                matInput 
+                [(ngModel)]="newMessage" 
+                (keyup.enter)="sendMessage()"
+                placeholder="Type your message..."
+                [disabled]="isSendingMessage"
+              >
+              <button 
+                mat-icon-button 
+                matSuffix 
+                (click)="sendMessage()"
+                [disabled]="!newMessage.trim() || isSendingMessage"
+              >
+                <mat-icon>send</mat-icon>
+              </button>
+            </mat-form-field>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

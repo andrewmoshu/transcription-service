@@ -1,0 +1,163 @@
+/* You can add global styles to this file, and also import other style files */
+@import '@angular/material/prebuilt-themes/indigo-pink.css';
+@import 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&display=swap';
+@import 'https://fonts.googleapis.com/icon?family=Material+Icons';
+
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  margin: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  background-color: #0a0a0a;
+  color: rgba(255, 255, 255, 0.9);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Global dark mode scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* Selection color */
+::selection {
+  background-color: rgba(0, 180, 216, 0.3);
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Focus outlines */
+:focus-visible {
+  outline: 2px solid rgba(0, 180, 216, 0.5);
+  outline-offset: 2px;
+}
+
+/* Material overrides for dark theme */
+.mat-mdc-dialog-container {
+  background-color: rgba(20, 20, 20, 0.95) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Ensure all Material buttons have proper dark mode colors */
+.mat-mdc-button,
+.mat-mdc-outlined-button,
+.mat-mdc-flat-button,
+.mat-mdc-raised-button,
+.mat-mdc-stroked-button {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+/* Dark mode for Material components that might not be styled */
+.mat-mdc-card {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+/* Global form field overrides for dark mode */
+.mat-mdc-form-field {
+  --mdc-outlined-text-field-container-color: transparent !important;
+  --mdc-outlined-text-field-outline-color: rgba(255, 255, 255, 0.1) !important;
+  --mdc-outlined-text-field-hover-outline-color: rgba(255, 255, 255, 0.2) !important;
+  --mdc-outlined-text-field-focus-outline-color: #00b4d8 !important;
+  --mdc-outlined-text-field-label-text-color: rgba(255, 255, 255, 0.5) !important;
+  --mdc-outlined-text-field-input-text-color: rgba(255, 255, 255, 0.9) !important;
+  --mdc-outlined-text-field-disabled-input-text-color: rgba(255, 255, 255, 0.3) !important;
+  --mdc-outlined-text-field-placeholder-text-color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Ensure all inputs have proper text color */
+input, textarea {
+  color: rgba(255, 255, 255, 0.9) !important;
+  background-color: transparent !important;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: rgba(255, 255, 255, 0.4) !important;
+}
+
+/* Material expansion panel overrides */
+.mat-expansion-panel {
+  background-color: rgba(255, 255, 255, 0.02) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.mat-expansion-panel-header {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.mat-expansion-indicator::after {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Material icon overrides */
+.mat-icon {
+  color: inherit;
+}
+
+/* Material Tab overrides for dark mode */
+.mat-mdc-tab {
+  color: rgba(255, 255, 255, 0.5) !important;
+}
+
+.mat-mdc-tab.mdc-tab--active {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.mat-mdc-tab .mdc-tab__text-label {
+  color: inherit !important;
+}
+
+.mdc-tab-indicator__content--underline {
+  background-color: #00b4d8 !important;
+  border-color: #00b4d8 !important;
+}
+
+/* Tab ripple effect */
+.mat-mdc-tab .mat-ripple-element {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+/* Snackbar Styles with dark mode */
+.mat-mdc-snack-bar-container.success-snackbar {
+  background-color: rgba(16, 185, 129, 0.9) !important;
+  color: white;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.mat-mdc-snack-bar-container.error-snackbar {
+  background-color: rgba(239, 68, 68, 0.9) !important;
+  color: white;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+
+.mat-mdc-snack-bar-container.info-snackbar {
+  background-color: rgba(59, 130, 246, 0.9) !important;
+  color: white;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+
+.mat-mdc-snack-bar-container .mat-mdc-button {
+  color: white !important;
+}
