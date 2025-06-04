@@ -1,0 +1,216 @@
+<div class="shared-session-viewer-container">
+  <!-- Loading State -->
+  <div class="upload-view" *ngIf="isLoading">
+    <div class="upload-container">
+      <div class="upload-header">
+        <div class="logo-wrapper">
+          <div class="logo-circle">
+            <mat-icon class="logo-icon">visibility</mat-icon>
+          </div>
+        </div>
+        <h1 class="app-title">Shared Live Session</h1>
+        <p class="app-subtitle">Connecting to live transcription session...</p>
+      </div>
+      
+      <div class="upload-card">
+        <div class="upload-zone">
+          <div class="upload-content">
+            <div class="upload-icon-wrapper">
+              <mat-progress-spinner diameter="40" mode="indeterminate"></mat-progress-spinner>
+            </div>
+            <h2 class="upload-title">Loading Session</h2>
+            <p class="upload-description">Please wait while we connect you to the shared session</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Content View -->
+  <div class="main-content" *ngIf="!isLoading">
+    <!-- Left Panel - Transcript Section -->
+    <div class="left-panel">
+      <div class="note-header">
+        <div class="file-info">
+          <div class="user-info">
+            <mat-icon class="file-type-icon">visibility</mat-icon>
+            <span class="filename">{{sessionInfo?.title || 'Live Transcription Session'}}</span>
+            <mat-chip class="live-session-badge">
+              <mat-icon>share</mat-icon>
+              Shared Session
+            </mat-chip>
+          </div>
+          <div class="file-meta">
+            <span class="timestamp">{{sessionInfo?.created_at | date:'MMM d \'at\' h:mm a'}}</span>
+            <span class="duration">
+              <mat-icon>{{isConnected ? 'wifi' : 'wifi_off'}}</mat-icon>
+              {{getStatusText()}}
+            </span>
+            <button mat-icon-button [matMenuTriggerFor]="menu">
+              <mat-icon>more_vert</mat-icon>
+            </button>
+            <mat-menu #menu="matMenu">
+              <button mat-menu-item (click)="downloadTranscript()" [disabled]="!fullTranscript">
+                <mat-icon>download</mat-icon>
+                <span>Download Transcript</span>
+              </button>
+            </mat-menu>
+          </div>
+        </div>
+      </div>
+
+      <mat-tab-group class="content-tabs">
+        <!-- Live Transcript Tab -->
+        <mat-tab label="Live Transcript">
+          <div class="tab-content">
+            <div class="transcript-content">
+              <div *ngIf="!fullTranscript" class="empty-state">
+                <mat-icon>mic_off</mat-icon>
+                <p>Waiting for live transcript...</p>
+                <p class="hint">The session host will start recording soon</p>
+              </div>
+              
+              <div *ngIf="fullTranscript">
+                <div 
+                  *ngFor="let line of transcriptLines; trackBy: trackByLine" 
+                  class="transcript-line">
+                  <span class="timestamp" *ngIf="extractTimestamp(line)">{{extractTimestamp(line)}}</span>
+                  <span class="transcript-text">{{removeTimestamp(line)}}</span>
+                </div>
+                
+                <div *ngIf="sessionInfo?.is_active && isConnected" class="recording-indicator">
+                  <mat-icon class="pulse">fiber_manual_record</mat-icon>
+                  <span>Live Recording Active...</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </mat-tab>
+
+        <!-- Session Info Tab -->
+        <mat-tab label="Session Info">
+          <div class="tab-content">
+            <div class="summary-content">
+              <div class="content-section">
+                <h3>Session Details</h3>
+                <div class="session-details">
+                  <div class="detail-item">
+                    <span class="detail-label">Session ID:</span>
+                    <span class="detail-value">{{sessionId}}</span>
+                  </div>
+                  <div class="detail-item" *ngIf="sessionInfo?.title">
+                    <span class="detail-label">Title:</span>
+                    <span class="detail-value">{{sessionInfo?.title}}</span>
+                  </div>
+                  <div class="detail-item" *ngIf="sessionInfo?.created_at">
+                    <span class="detail-label">Created:</span>
+                    <span class="detail-value">{{sessionInfo?.created_at | date:'full'}}</span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Status:</span>
+                    <span class="detail-value" [class.active]="sessionInfo?.is_active" [class.inactive]="!sessionInfo?.is_active">
+                      {{sessionInfo?.is_active ? 'Live Recording' : 'Session Ended'}}
+                    </span>
+                  </div>
+                  <div class="detail-item">
+                    <span class="detail-label">Connection:</span>
+                    <span class="detail-value" [class.connected]="isConnected" [class.disconnected]="!isConnected">
+                      {{isConnected ? 'Connected' : 'Disconnected'}}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div class="content-section">
+                <h3>About This Session</h3>
+                <p>You are viewing a shared live transcription session. This is a read-only view where you can see the transcript as it's being generated in real-time.</p>
+                <ul>
+                  <li>Transcript updates automatically as the host records</li>
+                  <li>You can download the current transcript at any time</li>
+                  <li>Connection status is shown in the header</li>
+                  <li>Session ends when the host stops sharing</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </div>
+
+    <!-- Right Panel - Status & Info Section -->
+    <div class="right-panel">
+      <div class="chat-section">
+        <div class="chat-header">
+          <h3>Session Status</h3>
+        </div>
+        
+        <div class="chat-container">
+          <div class="messages-area">
+            <!-- Status Cards -->
+            <div class="status-card" [class.active]="isConnected">
+              <div class="status-icon">
+                <mat-icon>{{isConnected ? 'wifi' : 'wifi_off'}}</mat-icon>
+              </div>
+              <div class="status-content">
+                <div class="status-title">Connection</div>
+                <div class="status-value">{{getStatusText()}}</div>
+              </div>
+            </div>
+
+            <div class="status-card" [class.active]="sessionInfo?.is_active" *ngIf="sessionInfo">
+              <div class="status-icon">
+                <mat-icon>{{sessionInfo.is_active ? 'radio_button_checked' : 'radio_button_unchecked'}}</mat-icon>
+              </div>
+              <div class="status-content">
+                <div class="status-title">Recording</div>
+                <div class="status-value">{{sessionInfo.is_active ? 'Live' : 'Stopped'}}</div>
+              </div>
+            </div>
+
+            <div class="status-card active">
+              <div class="status-icon">
+                <mat-icon>share</mat-icon>
+              </div>
+              <div class="status-content">
+                <div class="status-title">Session Type</div>
+                <div class="status-value">Shared Live</div>
+              </div>
+            </div>
+
+            <div class="status-card" [class.active]="transcriptLines.length > 0">
+              <div class="status-icon">
+                <mat-icon>description</mat-icon>
+              </div>
+              <div class="status-content">
+                <div class="status-title">Transcript Lines</div>
+                <div class="status-value">{{transcriptLines.length}}</div>
+              </div>
+            </div>
+
+            <!-- Help Section -->
+            <div class="help-section">
+              <div class="help-title">
+                <mat-icon>help_outline</mat-icon>
+                Viewer Guide
+              </div>
+              <div class="help-content">
+                <div class="help-item">
+                  <mat-icon>visibility</mat-icon>
+                  <span>Watch the transcript update in real-time</span>
+                </div>
+                <div class="help-item">
+                  <mat-icon>download</mat-icon>
+                  <span>Download transcript using the menu</span>
+                </div>
+                <div class="help-item">
+                  <mat-icon>info</mat-icon>
+                  <span>Check session details in the info tab</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div> 

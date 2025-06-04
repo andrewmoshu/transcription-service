@@ -1,0 +1,138 @@
+<div class="live-transcription-container">
+  <mat-card class="main-card">
+    <!-- Header -->
+    <mat-card-header>
+      <mat-card-title>
+        <mat-icon>mic</mat-icon>
+        Live Transcription
+      </mat-card-title>
+      <mat-card-subtitle>
+        Real-time speech transcription powered by Eliza
+      </mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <mat-chip-set>
+          <mat-chip [class.active]="isConnected">
+            <mat-icon>{{isConnected ? 'wifi' : 'wifi_off'}}</mat-icon>
+            {{getStatusText()}}
+          </mat-chip>
+          <mat-chip *ngIf="currentSession" class="active">
+            <mat-icon>session_info</mat-icon>
+            Session: {{currentSession.session_id.substring(0, 8)}}...
+          </mat-chip>
+          <mat-chip *ngIf="hasAccumulatedAudio()" class="accent">
+            <mat-icon>audio_file</mat-icon>
+            Audio Accumulated
+          </mat-chip>
+          <mat-chip *ngIf="isShared" class="primary">
+            <mat-icon>share</mat-icon>
+            Shared
+          </mat-chip>
+        </mat-chip-set>
+      </div>
+
+      <mat-divider></mat-divider>
+
+      <!-- Control Panel -->
+      <div class="control-panel">
+        <div class="session-controls">
+          <button 
+            mat-flat-button
+            (click)="createSession()"
+            [disabled]="!canCreateSession()"
+            class="control-button primary">
+            <mat-icon>add</mat-icon>
+            {{isCreatingSession ? 'Creating...' : 'New Session'}}
+          </button>
+
+          <button 
+            mat-flat-button
+            (click)="startSession()"
+            [disabled]="!canStartRecording()"
+            class="control-button primary">
+            <mat-icon>play_arrow</mat-icon>
+            {{getRecordingButtonText()}}
+          </button>
+
+          <button 
+            mat-flat-button
+            (click)="stopSession()"
+            [disabled]="!canStopRecording()"
+            class="control-button danger">
+            <mat-icon>stop</mat-icon>
+            Stop Recording
+          </button>
+
+          <button 
+            mat-flat-button
+            (click)="endSession()"
+            [disabled]="!canEndSession()"
+            class="control-button">
+            <mat-icon>close</mat-icon>
+            {{getEndSessionButtonText()}}
+            <mat-progress-spinner *ngIf="isProcessingSummary" diameter="16" mode="indeterminate" style="margin-left: 8px; display: inline-block;"></mat-progress-spinner>
+          </button>
+        </div>
+
+        <div class="transcript-controls">
+          <button 
+            mat-icon-button 
+            (click)="downloadTranscript()"
+            [disabled]="!fullTranscript || isProcessingSummary"
+            matTooltip="Download Transcript">
+            <mat-icon>download</mat-icon>
+          </button>
+
+          <button 
+            mat-icon-button 
+            (click)="clearTranscript()"
+            [disabled]="!fullTranscript || isRecording || isProcessingSummary"
+            matTooltip="Clear Transcript">
+            <mat-icon>clear</mat-icon>
+          </button>
+
+          <button 
+            mat-icon-button 
+            (click)="toggleSharing()"
+            [disabled]="!currentSession || isProcessingSummary"
+            [color]="isShared ? 'primary' : ''"
+            [matTooltip]="isShared ? 'Disable Sharing' : 'Enable Sharing'">
+            <mat-icon>{{isShared ? 'share_off' : 'share'}}</mat-icon>
+          </button>
+        </div>
+      </div>
+
+      <mat-divider></mat-divider>
+
+      <!-- Live Transcript Display -->
+      <div class="transcript-section">
+        <h3>Live Transcript</h3>
+        
+        <div class="transcript-area" [class.empty]="!fullTranscript">
+          <div *ngIf="!fullTranscript" class="empty-state">
+            <mat-icon>mic_off</mat-icon>
+            <p>Transcript will appear here during live recording</p>
+            <p class="hint">Create a session and start recording to begin</p>
+          </div>
+          
+          <div *ngIf="fullTranscript" class="transcript-content">
+            <div 
+              *ngFor="let line of transcriptLines; trackBy: trackByLine" 
+              class="transcript-line">
+              <span class="timestamp" *ngIf="extractTimestamp(line)">{{extractTimestamp(line)}}</span>
+              {{removeTimestamp(line)}}
+            </div>
+            
+            <div *ngIf="isRecording" class="recording-indicator">
+              <mat-icon class="pulse">fiber_manual_record</mat-icon>
+              <span>Recording...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </mat-card-content>
+  </mat-card>
+</div> 
