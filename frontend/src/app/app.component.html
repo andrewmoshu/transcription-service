@@ -1,0 +1,78 @@
+<div class="app-container">
+  <!-- Check if we're on a shared session route -->
+  <div *ngIf="!isSharedRoute()">
+    <!-- Selection Screen -->
+    <div class="selection-view" *ngIf="!selectedMode">
+      <div class="selection-container">
+        <!-- Logo and Title -->
+        <div class="app-header">
+          <div class="logo-wrapper">
+            <div class="logo-circle">
+              <mat-icon class="logo-icon">voice_chat</mat-icon>
+            </div>
+          </div>
+          <h1 class="app-title">Meeting Transcriber</h1>
+          <p class="app-subtitle">Powered by Eliza</p>
+        </div>
+
+        <!-- Mode Selection Cards -->
+        <div class="mode-selection">
+          <div class="mode-card" (click)="selectMode('file')" [class.selected]="false">
+            <div class="mode-icon-wrapper">
+              <div class="mode-icon-bg"></div>
+              <mat-icon class="mode-icon">upload_file</mat-icon>
+            </div>
+            <h3>File Analysis</h3>
+            <p>Upload and analyze audio recordings for detailed transcripts, summaries, and insights</p>
+            <div class="mode-features">
+              <span class="feature">• Detailed chapters</span>
+              <span class="feature">• AI summaries</span>
+              <span class="feature">• Interactive chat</span>
+            </div>
+          </div>
+
+          <div class="mode-card" (click)="selectMode('live')" [class.selected]="false">
+            <div class="mode-icon-wrapper">
+              <div class="mode-icon-bg"></div>
+              <mat-icon class="mode-icon">mic</mat-icon>
+            </div>
+            <h3>Live Transcription</h3>
+            <p>Real-time speech-to-text transcription using your microphone for live meetings</p>
+            <div class="mode-features">
+              <span class="feature">• Real-time processing</span>
+              <span class="feature">• Live timestamps</span>
+              <span class="feature">• Instant download</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- File Analysis Mode -->
+    <div class="mode-view" *ngIf="selectedMode === 'file'">
+      <div class="back-button-container" *ngIf="!cameFromLiveTranscription">
+        <button mat-icon-button (click)="goBack()" class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+      </div>
+      <app-meeting-analyzer 
+        (goBackToLiveTranscription)="returnToLiveTranscription()">
+      </app-meeting-analyzer>
+    </div>
+
+    <!-- Live Transcription Mode -->
+    <div class="mode-view" *ngIf="selectedMode === 'live'">
+      <div class="back-button-container">
+        <button mat-icon-button (click)="goBack()" class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+      </div>
+      <app-live-transcription 
+        (switchToMeetingAnalyzer)="switchToMeetingAnalyzer()">
+      </app-live-transcription>
+    </div>
+  </div>
+
+  <!-- Router outlet for shared sessions and other routes -->
+  <router-outlet></router-outlet>
+</div>

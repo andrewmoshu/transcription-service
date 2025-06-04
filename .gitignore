@@ -1,3 +1,4 @@
 .env
-*.json
+key.json
 __pycache__
+debug_audio

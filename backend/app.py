@@ -2,6 +2,9 @@ import streamlit as st
 import os
 import tempfile
 from dotenv import load_dotenv
+from flask import Flask, request, jsonify
+from flask_cors import CORS
+import werkzeug
 
 # Load environment variables from .env file
 load_dotenv()
@@ -25,12 +28,19 @@ from llm_utils import (
 )
 from langchain.memory import ConversationBufferMemory
 
+# Create Flask app
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+
+# Store memory sessions per meeting
+meeting_sessions = {}
+
 # Page configuration
 st.set_page_config(layout="wide", page_title="Meeting Analyzer Chatbot")
 
 st.title("🎙️ Meeting Analyzer & Chatbot")
 st.markdown("Upload your meeting audio file to get a transcription, summary, takeaways, notes, and chat about its content.")
-st.markdown("Powered by Google Gemini 2.5 Flash.")
+st.markdown("Powered by Eliza.")
 
 # --- Helper Functions ---
 SUPPORTED_AUDIO_TYPES = {
@@ -397,4 +407,134 @@ with tab5:
 
 # Display any general error messages at the bottom
 if st.session_state.error_message and not st.session_state.processing_complete:
-    st.sidebar.error(f"Last Error: {st.session_state.error_message}") 
+    st.sidebar.error(f"Last Error: {st.session_state.error_message}")
+
+# API Routes
+@app.route('/api/transcribe', methods=['POST'])
+def transcribe_endpoint():
+    """Endpoint for transcribing audio files"""
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+        
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(audio_file.filename)[1]) as tmp_file:
+            audio_file.save(tmp_file.name)
+            tmp_file_path = tmp_file.name
+        
+        # Get MIME type
+        mime_type = get_mime_type(audio_file.filename, audio_file.content_type)
+        
+        # Transcribe
+        transcript = transcribe_audio(tmp_file_path, mime_type)
+        os.remove(tmp_file_path)
+        
+        if transcript and not transcript.startswith("Error:"):
+            # Generate meeting analysis
+            takeaways = generate_meeting_takeaways(transcript)
+            summary = generate_meeting_summary(transcript)
+            notes = generate_meeting_notes(transcript)
+            
+            # Parse chapters
+            chapters = parse_chapter_transcript(transcript)
+            
+            # Create a session ID for this meeting
+            import uuid
+            session_id = str(uuid.uuid4())
+            meeting_sessions[session_id] = {
+                'transcript': transcript,
+                'memory': ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+            }
+            
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'transcript': transcript,
+                'chapters': chapters,
+                'takeaways': takeaways,
+                'summary': summary,
+                'notes': notes,
+                'filename': audio_file.filename
+            })
+        else:
+            return jsonify({'error': transcript or 'Transcription failed'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/chat', methods=['POST'])
+def chat_endpoint():
+    """Endpoint for chatting about the meeting"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        question = data.get('question')
+        
+        if not session_id or session_id not in meeting_sessions:
+            return jsonify({'error': 'Invalid session ID'}), 400
+        
+        if not question:
+            return jsonify({'error': 'No question provided'}), 400
+        
+        session = meeting_sessions[session_id]
+        
+        # Get chat response
+        response = get_chat_response(
+            transcript=session['transcript'],
+            user_question=question,
+            memory=session['memory']
+        )
+        
+        return jsonify({
+            'success': True,
+            'response': response
+        })
+        
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/search', methods=['POST'])
+def search_endpoint():
+    """Endpoint for searching within transcript"""
+    try:
+        data = request.get_json()
+        session_id = data.get('session_id')
+        search_term = data.get('search_term', '').lower()
+        
+        if not session_id or session_id not in meeting_sessions:
+            return jsonify({'error': 'Invalid session ID'}), 400
+        
+        transcript = meeting_sessions[session_id]['transcript']
+        chapters = parse_chapter_transcript(transcript)
+        
+        if search_term:
+            filtered_chapters = []
+            for chapter in chapters:
+                if (search_term in chapter['title'].lower() or 
+                    search_term in chapter['content'].lower()):
+                    filtered_chapters.append(chapter)
+            return jsonify({
+                'success': True,
+                'chapters': filtered_chapters,
+                'total_found': len(filtered_chapters)
+            })
+        else:
+            return jsonify({
+                'success': True,
+                'chapters': chapters,
+                'total_found': len(chapters)
+            })
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+# Run Flask app
+if __name__ == '__main__':
+    # Comment out or remove all Streamlit code below
+    pass
+    # Uncomment the line below to run Flask
+    app.run(debug=True, port=5000) 
