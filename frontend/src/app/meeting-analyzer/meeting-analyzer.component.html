@@ -91,8 +91,12 @@
       <div class="note-header">
         <div class="file-info">
           <div class="user-info">
-            <mat-icon class="file-type-icon">description</mat-icon>
+            <mat-icon class="file-type-icon">{{ isLiveSessionAnalysis ? 'mic' : 'description' }}</mat-icon>
             <span class="filename">{{ filename }}</span>
+            <mat-chip *ngIf="isLiveSessionAnalysis" class="live-session-badge">
+              <mat-icon>radio_button_checked</mat-icon>
+              Live Session
+            </mat-chip>
           </div>
           <div class="file-meta">
             <span class="timestamp">{{ processedTime | date:'MMM d \'at\' h:mm a - E' }}</span>
@@ -100,6 +104,14 @@
               <mat-icon>schedule</mat-icon>
               {{ duration }}
             </span>
+            <button 
+              *ngIf="isLiveSessionAnalysis" 
+              mat-icon-button 
+              (click)="returnToLiveTranscription()"
+              matTooltip="Back to Live Transcription"
+              class="back-to-live-button">
+              <mat-icon>keyboard_return</mat-icon>
+            </button>
             <button mat-icon-button [matMenuTriggerFor]="menu">
               <mat-icon>more_vert</mat-icon>
             </button>

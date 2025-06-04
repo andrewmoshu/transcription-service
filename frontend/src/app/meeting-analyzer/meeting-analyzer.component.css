@@ -229,20 +229,55 @@
 
 /* File Info */
 .file-info {
-  margin-top: 2rem;
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  color: rgba(255, 255, 255, 0.3);
-  font-size: 0.75rem;
-  letter-spacing: 0.3px;
+  width: 100%;
 }
 
-.info-icon {
-  font-size: 14px;
-  width: 14px;
-  height: 14px;
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.live-session-badge {
+  background: rgba(0, 180, 216, 0.15) !important;
+  border: 1px solid rgba(0, 180, 216, 0.4) !important;
+  color: #00b4d8 !important;
+  font-size: 0.75rem !important;
+  height: 24px !important;
+  padding: 0 8px !important;
+  margin-left: 0.5rem;
+  font-weight: 500 !important;
+  letter-spacing: 0.2px !important;
+}
+
+.live-session-badge mat-icon {
+  font-size: 14px !important;
+  width: 14px !important;
+  height: 14px !important;
+  color: #00b4d8 !important;
+  margin-right: 4px !important;
+}
+
+/* Enhanced Material Design chip overrides for live session badge */
+::ng-deep .live-session-badge.mat-mdc-chip {
+  --mdc-chip-container-color: rgba(0, 180, 216, 0.15) !important;
+  --mdc-chip-outline-color: rgba(0, 180, 216, 0.4) !important;
+  --mdc-chip-label-text-color: #00b4d8 !important;
+  --mdc-chip-with-icon-icon-color: #00b4d8 !important;
+  background: rgba(0, 180, 216, 0.15) !important;
+  border: 1px solid rgba(0, 180, 216, 0.4) !important;
+  color: #00b4d8 !important;
+}
+
+::ng-deep .live-session-badge.mat-mdc-chip .mat-icon {
+  color: #00b4d8 !important;
+}
+
+::ng-deep .live-session-badge.mat-mdc-chip .mdc-chip__primary-action {
+  color: #00b4d8 !important;
 }
 
 /* File Selected State */
@@ -607,6 +642,16 @@
   font-size: 14px;
   width: 14px;
   height: 14px;
+}
+
+.back-to-live-button {
+  color: rgba(0, 180, 216, 0.8) !important;
+  transition: all 0.2s ease !important;
+}
+
+.back-to-live-button:hover {
+  color: #00b4d8 !important;
+  background-color: rgba(0, 180, 216, 0.1) !important;
 }
 
 /* Content Tabs */

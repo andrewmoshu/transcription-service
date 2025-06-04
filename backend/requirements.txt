@@ -6,4 +6,8 @@ langchain-google-genai
 python-dotenv
 pydub
 flask
-flask-cors 
+flask-cors
+flask-socketio
+pyaudio
+websockets
+uuid 

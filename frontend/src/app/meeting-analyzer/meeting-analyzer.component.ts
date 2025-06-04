@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTabsModule } from '@angular/material/tabs';
@@ -11,6 +11,8 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatChipsModule } from '@angular/material/chips';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MeetingService, Chapter, TranscriptionResponse } from '../services/meeting.service';
 import { marked } from 'marked';
@@ -36,7 +38,9 @@ interface ChatMessage {
     MatFormFieldModule,
     MatExpansionModule,
     MatSnackBarModule,
-    MatMenuModule
+    MatMenuModule,
+    MatChipsModule,
+    MatTooltipModule
   ],
   templateUrl: './meeting-analyzer.component.html',
   styleUrls: ['./meeting-analyzer.component.css']
@@ -51,7 +55,7 @@ export class MeetingAnalyzerComponent implements OnInit {
   sessionId: string | null = null;
   filename: string = '';
   processedTime: Date = new Date();
-  duration: string = '00:31'; // Default duration, you can calculate this from audio
+  duration: string = '00:31'; // Default 
   
   // Content data
   transcript: string = '';
@@ -76,6 +80,11 @@ export class MeetingAnalyzerComponent implements OnInit {
   
   // Tab management
   selectedTabIndex = 0;
+  
+  // Live session tracking
+  isLiveSessionAnalysis = false;
+
+  @Output() goBackToLiveTranscription = new EventEmitter<void>();
 
   constructor(
     private meetingService: MeetingService,
@@ -99,6 +108,49 @@ export class MeetingAnalyzerComponent implements OnInit {
         this.showError('Backend API is not available. Please ensure the Flask server is running.');
       }
     });
+
+    // Check for live session analysis
+    this.checkForLiveSessionAnalysis();
+  }
+
+  private checkForLiveSessionAnalysis(): void {
+    const liveAnalysis = sessionStorage.getItem('live-session-analysis');
+    if (liveAnalysis) {
+      try {
+        const analysisData = JSON.parse(liveAnalysis);
+        
+        // Load the analysis data
+        this.sessionId = analysisData.sessionId;
+        this.transcript = analysisData.transcript;
+        this.chapters = analysisData.chapters;
+        this.filteredChapters = analysisData.chapters;
+        this.takeaways = analysisData.takeaways;
+        this.summary = analysisData.summary;
+        this.notes = analysisData.notes;
+        this.filename = analysisData.filename;
+        this.processedTime = new Date();
+        this.isLiveSessionAnalysis = true;
+        
+        // Format content
+        this.formatContent();
+        
+        // Clear the session storage
+        sessionStorage.removeItem('live-session-analysis');
+        
+        // Show success message and switch to transcript tab
+        this.showSuccess('Live session analysis loaded successfully!');
+        this.selectedTabIndex = 0;
+        
+        // Add note about original live transcript if available
+        if (analysisData.originalTranscript) {
+          this.showInfo('This analysis was generated from a live transcription session. The transcript has been enhanced for analysis.');
+        }
+        
+      } catch (error) {
+        console.error('Error loading live session analysis:', error);
+        sessionStorage.removeItem('live-session-analysis');
+      }
+    }
   }
 
   onFileSelected(event: any): void {
@@ -365,6 +417,7 @@ export class MeetingAnalyzerComponent implements OnInit {
     this.notesHtml = '';
     this.chatMessages = [];
     this.searchTerm = '';
+    this.isLiveSessionAnalysis = false;
   }
 
   private showSuccess(message: string): void {
@@ -401,5 +454,9 @@ export class MeetingAnalyzerComponent implements OnInit {
       return 'Processing...';
     }
     return this.selectedFile ? 'Start Analysis' : 'Select a file first';
+  }
+
+  returnToLiveTranscription(): void {
+    this.goBackToLiveTranscription.emit();
   }
 } 

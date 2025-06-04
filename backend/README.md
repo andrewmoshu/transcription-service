@@ -1,88 +1,83 @@
-# Meeting Analyzer Chatbot
+# Unified Transcription Server
 
-This application allows you to upload an audio file of a meeting, and it will:
-1.  Transcribe the audio.
-2.  Generate meeting takeaways.
-3.  Provide a summary of the meeting.
-4.  Create meeting notes.
-5.  Allow you to ask questions about the meeting content.
+A unified Flask-SocketIO server that combines both live transcription and meeting analysis functionality.
+
+## Features
+
+- **Live Transcription**: Real-time speech-to-text using WebSocket connections
+- **Meeting Analysis**: Upload audio files for transcription, summary, and analysis
+- **Chat Interface**: Ask questions about transcribed meetings
+- **Search**: Search through transcripts and chapters
+
+## Architecture
+
+The unified server combines the functionality of the previous `live_app.py` and `api.py` into a single application running on port 5000.
+
+### Endpoints
+
+#### Live Transcription API
+- `POST /api/sessions` - Create new transcription session
+- `DELETE /api/sessions/{id}` - Delete transcription session  
+- `POST /api/sessions/{id}/start` - Start transcription
+- `POST /api/sessions/{id}/stop` - Stop transcription
+- `GET /api/sessions/{id}/transcript` - Get session transcript
+
+#### Meeting Analysis API
+- `POST /api/transcribe` - Upload and analyze audio file
+- `POST /api/chat` - Chat about meeting content
+- `GET /api/chat/history/{session_id}` - Get chat history
+- `POST /api/search` - Search transcript content
+
+#### WebSocket Events
+- `connect` - Client connects to server
+- `join_session` - Join transcription session
+- `leave_session` - Leave transcription session
+- `audio_chunk` - Send audio data for real-time transcription
+- `get_transcript` - Request current transcript
 
 ## Setup
 
-1.  **Clone the repository:**
-    ```bash
-    git clone <repository-url>
-    cd <repository-name>
-    ```
+### Prerequisites
+- Python 3.8+
+- Google Cloud credentials (for Vertex AI)
+- Required Python packages (see requirements.txt)
 
-2.  **Create a virtual environment and activate it:**
-    ```bash
-    python -m venv venv
-    # On Windows
-    venv\Scripts\activate
-    # On macOS/Linux
-    source venv/bin/activate
-    ```
+### Environment Variables
+```bash
+GOOGLE_API_KEY=your_gemini_api_key
+GOOGLE_CLOUD_PROJECT=your_gcp_project
+GOOGLE_CLOUD_LOCATION=us-central1
+SECRET_KEY=your_secret_key
+```
 
-3.  **Install the dependencies:**
-    ```bash
-    pip install -r requirements.txt
-    ```
+### Installation
+```bash
+cd backend
+pip install -r requirements.txt
+python unified_app.py
+```
 
-4.  **Set up authentication:**
+The server will start on `http://localhost:5000`
 
-    **Option A: Using Google AI API Key (Recommended for simplicity)**
-    
-    Create a `.env` file in the root of the project and add:
-    ```env
-    GOOGLE_API_KEY="your-google-ai-api-key"
-    ```
-    Get your API key from [Google AI Studio](https://makersuite.google.com/app/apikey).
+## Migration from Separate Servers
 
-    **Option B: Using Google Cloud Vertex AI (Enterprise/Production)**
-    
-    Create a `.env` file in the root of the project and add:
-    ```env
-    GOOGLE_CLOUD_PROJECT="YOUR_GOOGLE_CLOUD_PROJECT_ID"
-    GOOGLE_CLOUD_LOCATION="your-google-cloud-location" # e.g., "us-central1" or "global"
-    # Optional: Use a Service Account JSON key file
-    # GOOGLE_APPLICATION_CREDENTIALS="/path/to/your/service-account-key.json"
-    ```
+If you were previously running `live_app.py` (port 5001) and `api.py` (port 5000) separately:
 
-    **For Vertex AI setup, you'll also need:**
-    - Enable the Vertex AI API and Cloud Storage API in your Google Cloud project
-    - The application will automatically create a temporary Cloud Storage bucket for audio file uploads (required for Vertex AI)
-    - Ensure your service account has permissions for both Vertex AI and Cloud Storage
+1. Stop both servers
+2. Run the new unified server: `python unified_app.py`
+3. The frontend automatically connects to port 5000 for both services
 
-    **Authentication Methods for Vertex AI:**
+## Dependencies
 
-    *   **For local development:** Use Application Default Credentials (ADC) by running:
-        ```bash
-        gcloud auth application-default login
-        ```
+- Flask & Flask-SocketIO
+- Google Generative AI (Gemini)
+- LangChain
+- Other dependencies in requirements.txt
 
-    *   **For production/CI/CD:** Use a Service Account JSON key file:
-        1.  Create a service account and download its JSON key file from the Google Cloud Console (IAM & Admin > Service Accounts). Ensure the service account has appropriate permissions (e.g., Vertex AI User, Storage Admin).
-        2.  Set the `GOOGLE_APPLICATION_CREDENTIALS` environment variable to the absolute path of this JSON file in your `.env` file.
+## Error Handling
 
-    Refer to the [Google Cloud Vertex AI documentation](https://cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash) for more details on setting up Vertex AI authentication and enabling necessary APIs.
-
-5.  **Run the application:**
-    ```bash
-    streamlit run app.py
-    ```
-
-## Usage
-
-1.  Open your browser and go to the URL provided by Streamlit (usually `http://localhost:8501`).
-
-2.  Upload your audio file (supported formats: MP3, WAV, M4A, FLAC, AAC, OGG, OPUS, WEBM).
-
-3.  Click "Process Meeting Audio" to start transcription and analysis.
-
-4.  The application will display the transcription, takeaways, summary, and notes in separate tabs.
-
-5.  Navigate to the "Chat about the Meeting" tab to ask questions about the uploaded meeting.
-
-## Model Used
-This application uses `gemini-2.5-flash` for all generative tasks. The transcription uses the Google Gemini API directly, while the LangChain integration uses `ChatGoogleGenerativeAI` for generating summaries, takeaways, notes, and chat responses. 
+The unified server includes comprehensive error handling:
+- Global exception handlers
+- Socket error management
+- Connection timeout handling
+- Graceful error recovery 

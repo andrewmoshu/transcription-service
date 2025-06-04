@@ -40,7 +40,7 @@ st.set_page_config(layout="wide", page_title="Meeting Analyzer Chatbot")
 
 st.title("🎙️ Meeting Analyzer & Chatbot")
 st.markdown("Upload your meeting audio file to get a transcription, summary, takeaways, notes, and chat about its content.")
-st.markdown("Powered by Google Gemini 2.5 Flash.")
+st.markdown("Powered by Eliza.")
 
 # --- Helper Functions ---
 SUPPORTED_AUDIO_TYPES = {
