@@ -7,7 +7,8 @@
         Live Transcription
       </mat-card-title>
       <mat-card-subtitle>
-        Real-time speech transcription powered by Eliza
+        Real-time speech transcription powered by Eliza<br>
+        <small>Captures microphone and system audio (when available) • Transcribes every 5 seconds</small>
       </mat-card-subtitle>
     </mat-card-header>
 
@@ -30,6 +31,10 @@
           <mat-chip *ngIf="isShared" class="primary">
             <mat-icon>share</mat-icon>
             Shared
+          </mat-chip>
+          <mat-chip *ngIf="audioSourceInfo" class="info">
+            <mat-icon>settings_input_component</mat-icon>
+            {{audioSourceInfo}}
           </mat-chip>
         </mat-chip-set>
       </div>

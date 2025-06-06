@@ -53,10 +53,81 @@ body {
   outline-offset: 2px;
 }
 
-/* Material overrides for dark theme */
-.mat-mdc-dialog-container {
-  background-color: rgba(20, 20, 20, 0.95) !important;
+/* Material overrides for dark theme - More aggressive */
+.mat-mdc-dialog-container,
+.mat-dialog-container,
+.mat-mdc-dialog-surface,
+.mdc-dialog .mdc-dialog__surface {
+  background-color: rgba(20, 20, 20, 0.98) !important;
+  background: rgba(20, 20, 20, 0.98) !important;
   color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 16px !important;
+}
+
+.mat-mdc-dialog-title,
+.mat-dialog-title,
+.mdc-dialog__title {
+  color: rgba(255, 255, 255, 0.95) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+.mat-mdc-dialog-content,
+.mat-dialog-content,
+.mdc-dialog__content {
+  color: rgba(255, 255, 255, 0.9) !important;
+  background: transparent !important;
+}
+
+.mat-mdc-dialog-actions,
+.mat-dialog-actions,
+.mdc-dialog__actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.05) !important;
+  padding: 16px 24px !important;
+  background: transparent !important;
+}
+
+/* Force all dialog elements to inherit dark colors */
+.mat-mdc-dialog-container *,
+.mat-dialog-container * {
+  color: inherit !important;
+}
+
+/* Override any white backgrounds in dialogs */
+.mat-mdc-dialog-container .mat-mdc-form-field,
+.mat-dialog-container .mat-mdc-form-field {
+  background: transparent !important;
+}
+
+/* Dialog overlay backdrop */
+.cdk-overlay-backdrop.cdk-overlay-backdrop-showing {
+  background-color: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(4px);
+}
+
+/* Material radio buttons in dialogs */
+.mat-mdc-dialog-container .mat-mdc-radio-button {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.mat-mdc-dialog-container .mdc-radio {
+  --mdc-radio-selected-focus-icon-color: #00b4d8 !important;
+  --mdc-radio-selected-hover-icon-color: #00b4d8 !important;
+  --mdc-radio-selected-icon-color: #00b4d8 !important;
+  --mdc-radio-selected-pressed-icon-color: #00b4d8 !important;
+  --mdc-radio-unselected-focus-icon-color: rgba(255, 255, 255, 0.5) !important;
+  --mdc-radio-unselected-hover-icon-color: rgba(255, 255, 255, 0.6) !important;
+  --mdc-radio-unselected-icon-color: rgba(255, 255, 255, 0.4) !important;
+  --mdc-radio-unselected-pressed-icon-color: rgba(255, 255, 255, 0.5) !important;
+}
+
+/* Material select in dialogs */
+.mat-mdc-dialog-container .mat-mdc-select {
+  color: rgba(255, 255, 255, 0.9) !important;
+}
+
+.mat-mdc-dialog-container .mat-mdc-select-arrow {
+  color: rgba(255, 255, 255, 0.5) !important;
 }
 
 /* Ensure all Material buttons have proper dark mode colors */
@@ -160,4 +231,39 @@ textarea::placeholder {
 
 .mat-mdc-snack-bar-container .mat-mdc-button {
   color: white !important;
+}
+
+/* Dark dialog panel class for explicit dark theming */
+.dark-dialog .mat-mdc-dialog-container,
+.dark-dialog .mat-dialog-container,
+.dark-dialog .mat-mdc-dialog-surface,
+.dark-dialog .mdc-dialog .mdc-dialog__surface {
+  background-color: rgba(15, 15, 15, 0.98) !important;
+  background: rgba(15, 15, 15, 0.98) !important;
+  color: rgba(255, 255, 255, 0.9) !important;
+  border: 1px solid rgba(255, 255, 255, 0.12) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.8), 0 10px 10px -5px rgba(0, 0, 0, 0.6) !important;
+}
+
+.dark-dialog .mat-mdc-dialog-title,
+.dark-dialog .mat-dialog-title,
+.dark-dialog .mdc-dialog__title {
+  color: rgba(255, 255, 255, 0.95) !important;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+}
+
+.dark-dialog .mat-mdc-dialog-content,
+.dark-dialog .mat-dialog-content,
+.dark-dialog .mdc-dialog__content {
+  color: rgba(255, 255, 255, 0.9) !important;
+  background: transparent !important;
+}
+
+.dark-dialog .mat-mdc-dialog-actions,
+.dark-dialog .mat-dialog-actions,
+.dark-dialog .mdc-dialog__actions {
+  border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
+  padding: 16px 24px !important;
+  background: transparent !important;
 }

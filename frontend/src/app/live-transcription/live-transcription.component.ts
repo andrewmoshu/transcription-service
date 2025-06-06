@@ -1,41 +1,158 @@
-import { Component, OnInit, OnDestroy, Inject, Output, EventEmitter } from '@angular/core';
+import { Component, OnInit, OnDestroy, inject, Inject, Output, EventEmitter } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { MatTabsModule } from '@angular/material/tabs';
+import { MatCardModule } from '@angular/material/card';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
+import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatCardModule } from '@angular/material/card';
+import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDividerModule } from '@angular/material/divider';
 import { MatInputModule } from '@angular/material/input';
 import { MatFormFieldModule } from '@angular/material/form-field';
-import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
-import { MatDividerModule } from '@angular/material/divider';
-import { MatChipsModule } from '@angular/material/chips';
+import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatDialogModule, MatDialog, MatDialogRef, MAT_DIALOG_DATA } from '@angular/material/dialog';
-import { MatTooltipModule } from '@angular/material/tooltip';
-import { Subscription } from 'rxjs';
-import { 
-  LiveTranscriptionService, 
-  LiveSession, 
-  TranscriptUpdate 
+import { MatSelectModule } from '@angular/material/select';
+import { MatRadioModule } from '@angular/material/radio';
+import { Subject, interval, takeUntil, Subscription } from 'rxjs';
+import { AudioSourceDialogComponent, AudioSourceSelection } from '../audio-source-dialog/audio-source-dialog.component';
+import {
+  LiveTranscriptionService,
+  LiveSession,
+  TranscriptUpdate,
+  LiveTranscriptResponse,
+  SessionStatusUpdate
 } from '../services/live-transcription.service';
 import { MeetingService, TranscriptionResponse } from '../services/meeting.service';
+
+// Import the worklet using audio-worklet-loader
+import audioProcessorWorkletUrl from '../audio-processor.worklet.js';
 
 // Confirmation dialog component
 @Component({
   selector: 'app-confirmation-dialog',
   standalone: true,
-  imports: [CommonModule, MatDialogModule, MatButtonModule],
+  imports: [CommonModule, MatDialogModule, MatButtonModule, MatIconModule],
   template: `
-    <h2 mat-dialog-title>{{data.title}}</h2>
-    <mat-dialog-content>
-      <p>{{data.message}}</p>
-    </mat-dialog-content>
-    <mat-dialog-actions align="end">
-      <button mat-button (click)="onCancel()">{{data.cancelText}}</button>
-      <button mat-flat-button color="primary" (click)="onConfirm()">{{data.confirmText}}</button>
-    </mat-dialog-actions>
-  `
+    <div class="confirmation-dialog">
+      <h2 mat-dialog-title>
+        <mat-icon class="dialog-icon">{{getDialogIcon()}}</mat-icon>
+        {{data.title}}
+      </h2>
+      
+      <mat-dialog-content>
+        <div class="message-content">
+          <p class="main-message">{{getMainMessage()}}</p>
+          <p class="sub-message" *ngIf="getSubMessage()">{{getSubMessage()}}</p>
+        </div>
+      </mat-dialog-content>
+      
+      <mat-dialog-actions>
+        <button mat-button (click)="onCancel()" class="cancel-btn">
+          <mat-icon>close</mat-icon>
+          {{data.cancelText}}
+        </button>
+        <button mat-flat-button color="primary" (click)="onConfirm()" class="confirm-btn">
+          <mat-icon>{{getConfirmIcon()}}</mat-icon>
+          {{data.confirmText}}
+        </button>
+      </mat-dialog-actions>
+    </div>
+  `,
+  styles: [`
+    .confirmation-dialog {
+      min-width: 400px;
+      max-width: 500px;
+    }
+
+    .confirmation-dialog h2 {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      color: rgba(255, 255, 255, 0.95);
+      font-weight: 400;
+      font-size: 1.25rem;
+    }
+
+    .dialog-icon {
+      font-size: 24px;
+      width: 24px;
+      height: 24px;
+    }
+
+    .dialog-icon.info {
+      color: #00b4d8;
+    }
+
+    .dialog-icon.warning {
+      color: #ff9800;
+    }
+
+    .dialog-icon.success {
+      color: #4caf50;
+    }
+
+    .message-content {
+      margin-top: 8px;
+    }
+
+    .main-message {
+      color: rgba(255, 255, 255, 0.9);
+      font-size: 1rem;
+      line-height: 1.5;
+      margin: 0 0 12px 0;
+    }
+
+    .sub-message {
+      color: rgba(255, 255, 255, 0.7);
+      font-size: 0.9rem;
+      line-height: 1.4;
+      margin: 0;
+      white-space: pre-line;
+    }
+
+    mat-dialog-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      padding: 0 !important;
+      margin-top: 24px;
+    }
+
+    .cancel-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      color: rgba(255, 255, 255, 0.7) !important;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 8px 16px;
+    }
+
+    .cancel-btn:hover {
+      background: rgba(255, 255, 255, 0.05) !important;
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .confirm-btn {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(0, 180, 216, 0.1) !important;
+      border: 1px solid rgba(0, 180, 216, 0.3) !important;
+      color: #00b4d8 !important;
+      border-radius: 8px;
+      padding: 8px 16px;
+    }
+
+    .confirm-btn:hover {
+      background: rgba(0, 180, 216, 0.15) !important;
+      border-color: rgba(0, 180, 216, 0.4) !important;
+    }
+  `]
 })
 export class ConfirmationDialogComponent {
   constructor(
@@ -50,12 +167,36 @@ export class ConfirmationDialogComponent {
   onCancel(): void {
     this.dialogRef.close(false);
   }
+
+  getDialogIcon(): string {
+    switch (this.data.title.toLowerCase()) {
+      case 'warning':
+        return 'warning';
+      case 'success':
+        return 'check_circle';
+      default:
+        return 'info';
+    }
+  }
+
+  getMainMessage(): string {
+    return this.data.message;
+  }
+
+  getSubMessage(): string | null {
+    return this.data.subMessage || null;
+  }
+
+  getConfirmIcon(): string {
+    return this.data.title.toLowerCase() === 'warning' ? 'warning' : 'check_circle';
+  }
 }
 
 // Add confirmation dialog component interface
 interface ConfirmationDialogData {
   title: string;
   message: string;
+  subMessage?: string;
   confirmText: string;
   cancelText: string;
 }
@@ -77,7 +218,9 @@ interface ConfirmationDialogData {
     MatDividerModule,
     MatChipsModule,
     MatDialogModule,
-    MatTooltipModule
+    MatTooltipModule,
+    MatSelectModule,
+    MatRadioModule
   ],
   templateUrl: './live-transcription.component.html',
   styleUrls: ['./live-transcription.component.css']
@@ -99,26 +242,31 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
   // Subscriptions
   private subscriptions: Subscription[] = [];
   
-  // Audio capture methods
+  // Audio capture methods - Updated for AudioWorklet
   private audioContext: AudioContext | null = null;
   private mediaRecorder: MediaRecorder | null = null;
-  private audioStream: MediaStream | null = null;
+  private microphoneStream: MediaStream | null = null;
+  private systemStream: MediaStream | null = null;
+  private audioWorkletNode: AudioWorkletNode | null = null;
   private sourceNode: MediaStreamAudioSourceNode | null = null;
-  private processorNode: ScriptProcessorNode | null = null;
+  private mixerNode: GainNode | null = null;
   audioChunks: Blob[] = []; // Keep for MediaRecorder fallback
   private chunkCounter = 0;
   private audioBuffer: Float32Array[] = [];
   private completeRawBuffer: Float32Array[] = []; // Store complete recording
   private accumulatedAudioChunks: Blob[] = []; // Accumulate audio across sessions
   private accumulatedRawBuffer: Float32Array[] = []; // Accumulate raw audio across sessions
-  private bufferSize = 4096;
   
   // Chunk configuration
-  private readonly CHUNK_DURATION_SAMPLES = 240000; // 15 seconds at 16kHz
+  private readonly CHUNK_DURATION_SAMPLES = 80000; // 5 seconds at 16kHz
   
   // Processing state
   isProcessingSummary = false;
   isProcessingChunk = false;
+
+  // Audio device management
+  private availableMicDevices: MediaDeviceInfo[] = [];
+  audioSourceInfo = '';
 
   @Output() sessionEnded = new EventEmitter<void>();
   @Output() switchToMeetingAnalyzer = new EventEmitter<void>();
@@ -133,6 +281,7 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
   ngOnInit(): void {
     this.setupSubscriptions();
     this.checkHealth();
+    this.loadAudioDevices();
   }
 
   ngOnDestroy(): void {
@@ -141,6 +290,53 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
       this.stopSession();
     }
     this.liveTranscriptionService.disconnect();
+  }
+
+  private async loadAudioDevices(): Promise<void> {
+    try {
+      // Request microphone permission first to get device labels
+      const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      tempStream.getTracks().forEach(track => track.stop());
+      
+      // Now get the actual device list
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      this.availableMicDevices = devices.filter(device => device.kind === 'audioinput');
+      console.log('Available microphone devices:', this.availableMicDevices);
+      
+      // Check browser capabilities for system audio
+      this.checkBrowserCapabilities();
+      
+    } catch (error) {
+      console.error('Error loading audio devices:', error);
+      this.showError('Unable to access microphone devices. Please check permissions.');
+    }
+  }
+
+  private checkBrowserCapabilities(): void {
+    console.log('=== BROWSER CAPABILITIES CHECK ===');
+    console.log('User Agent:', navigator.userAgent);
+    console.log('getDisplayMedia supported:', !!navigator.mediaDevices.getDisplayMedia);
+    console.log('Screen Capture API supported:', 'getDisplayMedia' in navigator.mediaDevices);
+    
+    // Check for specific browser features
+    const userAgent = navigator.userAgent.toLowerCase();
+    console.log('Browser detection:', {
+      isChrome: userAgent.includes('chrome') && !userAgent.includes('edge'),
+      isEdge: userAgent.includes('edge'),
+      isFirefox: userAgent.includes('firefox'),
+      isSafari: userAgent.includes('safari') && !userAgent.includes('chrome')
+    });
+    
+    // Test if we can access screen capture permissions
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: 'camera' as any }).then(result => {
+        console.log('Camera permission state:', result.state);
+      }).catch(err => {
+        console.log('Permission query not supported');
+      });
+    }
+    
+    console.log('=== END CAPABILITIES CHECK ===');
   }
 
   private setupSubscriptions(): void {
@@ -413,7 +609,45 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
     console.log('Is connected:', this.isConnected);
     console.log('Current transcript lines:', this.transcriptLines.length);
 
-    this.liveTranscriptionService.startSession(this.currentSession.session_id).subscribe({
+    // Show audio source selection dialog
+    this.showAudioSourceSelection();
+  }
+
+  private showAudioSourceSelection(): void {
+    if (this.availableMicDevices.length === 0) {
+      this.showError('No microphone devices available. Please check your audio setup.');
+      return;
+    }
+
+    const dialogRef = this.dialog.open(AudioSourceDialogComponent, {
+      width: '500px',
+      panelClass: 'dark-dialog',
+      data: { audioDevices: this.availableMicDevices }
+    });
+
+    dialogRef.afterClosed().subscribe((result: AudioSourceSelection) => {
+      if (result) {
+        const includeSystemAudio = result.sourceType === 'both';
+        const includeSystemOnly = result.sourceType === 'system-only';
+        const useMicrophone = result.sourceType === 'microphone' || result.sourceType === 'both';
+        
+        const micDeviceId = useMicrophone ? (result.deviceId || this.availableMicDevices[0]?.deviceId) : '';
+        
+        this.startRecordingWithSources(
+          micDeviceId, 
+          includeSystemAudio || includeSystemOnly, 
+          useMicrophone
+        );
+      }
+    });
+  }
+
+  private startRecordingWithSources(
+    micDeviceId: string, 
+    includeSystemAudio: boolean, 
+    useMicrophone: boolean = true
+  ): void {
+    this.liveTranscriptionService.startSession(this.currentSession!.session_id).subscribe({
       next: (response) => {
         console.log('Start session response:', response);
         if (response.success) {
@@ -422,10 +656,9 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
           this.isPaused = false;
           this.showSuccess(wasResuming ? 'Recording resumed' : 'Live transcription started');
           console.log('Starting audio capture...');
-          this.startAudioCapture();
+          this.startAudioCapture(micDeviceId, includeSystemAudio, useMicrophone);
           
           // Only request current transcript if this is NOT a resume
-          // When resuming, we want to keep the existing transcript and just add new content
           if (!wasResuming) {
             console.log('Fresh start - requesting current transcript...');
             setTimeout(() => {
@@ -444,6 +677,693 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
         this.showError('Failed to start session');
       }
     });
+  }
+
+  private async startAudioCapture(micDeviceId: string, includeSystemAudio: boolean, useMicrophone: boolean = true): Promise<void> {
+    try {
+      console.log('Starting audio capture with microphone:', useMicrophone, 'system audio:', includeSystemAudio);
+      
+      // Get microphone access with specific device (only if needed)
+      if (useMicrophone && micDeviceId) {
+        this.microphoneStream = await navigator.mediaDevices.getUserMedia({ 
+          audio: {
+            deviceId: micDeviceId,
+            sampleRate: 16000,
+            channelCount: 1,
+            echoCancellation: true,
+            noiseSuppression: true,
+            autoGainControl: true
+          } 
+        });
+        console.log('Microphone stream obtained successfully');
+      } else {
+        console.log('Skipping microphone setup - audio-only mode');
+        this.microphoneStream = null;
+      }
+      
+      // Try to get system audio if requested
+      if (includeSystemAudio) {
+        try {
+          console.log('Attempting to capture system audio...');
+          
+          // Build common audio constraints
+          const commonAudioConstraints: MediaTrackConstraints = {
+            channelCount: 1,
+            sampleRate: 16000,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false
+          };
+          
+          this.systemStream = await this.captureDisplayAudio(commonAudioConstraints);
+          
+          if (!this.systemStream) {
+            throw new Error('System audio stream not available after capture attempt');
+          }
+          
+          // Verify audio tracks
+          const audioTracks = this.systemStream.getAudioTracks();
+          console.log('System audio tracks:', audioTracks);
+          
+          if (audioTracks.length === 0) {
+            console.warn('No audio tracks in system stream');
+            this.systemStream.getTracks().forEach(track => track.stop());
+            this.systemStream = null;
+            throw new Error('No audio tracks available from selected source');
+          }
+          
+          // Check audio track capabilities
+          const audioTrack = audioTracks[0];
+          console.log('Audio track settings:', audioTrack.getSettings());
+          console.log('Audio track capabilities:', audioTrack.getCapabilities());
+          
+          console.log('System audio stream obtained successfully');
+          this.showSuccess('System audio capture enabled!');
+          
+        } catch (systemError: any) {
+          console.error('System audio capture failed:', systemError);
+          
+          // Provide specific error messages based on error type
+          let errorMessage = 'System audio capture failed. Using microphone only.';
+          
+          if (systemError.name === 'NotAllowedError') {
+            errorMessage = 'Screen sharing permission denied. Please allow screen sharing and try again.';
+          } else if (systemError.name === 'NotSupportedError') {
+            errorMessage = 'System audio capture not supported in this browser. Try Chrome or Edge for best compatibility.';
+          } else if (systemError.name === 'NotFoundError') {
+            errorMessage = 'No screen/window available for audio capture. Make sure applications with audio are running.';
+          } else if (systemError.name === 'AbortError') {
+            errorMessage = 'Screen sharing cancelled by user. Using microphone only.';
+          } else if (systemError.name === 'TypeError') {
+            errorMessage = 'Browser does not support system audio capture. Try Chrome or Edge.';
+          } else if (systemError.message?.includes('not supported')) {
+            errorMessage = 'System audio capture not supported. Try enabling "Experimental Web Platform features" in Chrome flags.';
+          } else if (systemError.message?.includes('audio tracks')) {
+            errorMessage = 'Selected source has no audio. Please select a window with active audio.';
+          } else if (systemError.message) {
+            errorMessage = `System audio capture failed: ${systemError.message}. Using microphone only.`;
+          }
+          
+          this.showError(errorMessage);
+          
+          // Show browser-specific help
+          this.showBrowserSpecificHelp();
+        }
+      }
+
+      // Create Audio Context with proper sample rate
+      this.audioContext = new AudioContext({ 
+        sampleRate: 48000 // Use native sample rate, we'll downsample in worklet
+      });
+      
+      // Load and setup AudioWorklet
+      await this.setupAudioWorklet();
+      
+      // Create source nodes
+      let microphoneSource: MediaStreamAudioSourceNode | null = null;
+      if (this.microphoneStream) {
+        microphoneSource = this.audioContext.createMediaStreamSource(this.microphoneStream);
+      }
+      let systemSource: MediaStreamAudioSourceNode | null = null;
+      
+      // Create a mixer to combine audio sources
+      this.mixerNode = this.audioContext.createGain();
+      this.mixerNode.gain.value = 1.0;
+      
+      // Connect microphone if available
+      if (microphoneSource) {
+        microphoneSource.connect(this.mixerNode);
+        console.log('Microphone connected to mixer');
+      }
+      
+      // Connect system audio if available
+      if (this.systemStream) {
+        systemSource = this.audioContext.createMediaStreamSource(this.systemStream);
+        systemSource.connect(this.mixerNode);
+        console.log('System audio connected to mixer');
+      }
+      
+      // Ensure we have at least one audio source
+      if (!microphoneSource && !systemSource) {
+        throw new Error('No audio sources available');
+      }
+      
+      // Connect to AudioWorklet or ScriptProcessor
+      this.mixerNode.connect(this.audioWorkletNode!);
+      // DO NOT connect to destination to avoid hearing yourself
+      // this.audioWorkletNode!.connect(this.audioContext.destination);
+      
+      // Store the first available source for cleanup
+      this.sourceNode = microphoneSource || systemSource;
+      
+      // Reset audio buffers and counter
+      this.audioBuffer = [];
+      this.chunkCounter = 0;
+      
+      // Start MediaRecorder for fallback/debugging (only if we have microphone)
+      if (this.microphoneStream) {
+        this.startMediaRecorderFallback();
+      }
+      
+      // Update audio source info
+      let audioSourceDesc = '';
+      
+      if (this.microphoneStream && this.systemStream) {
+        const micDevice = this.availableMicDevices.find(d => d.deviceId === micDeviceId);
+        const micName = micDevice?.label || 'Default microphone';
+        audioSourceDesc = `${micName} + System Audio`;
+      } else if (this.microphoneStream) {
+        const micDevice = this.availableMicDevices.find(d => d.deviceId === micDeviceId);
+        audioSourceDesc = micDevice?.label || 'Default microphone';
+      } else if (this.systemStream) {
+        audioSourceDesc = 'System Audio Only';
+      }
+      
+      this.audioSourceInfo = audioSourceDesc;
+      
+      this.showSuccess(`Audio capture started: ${this.audioSourceInfo}`);
+      
+    } catch (error: any) {
+      console.error('Error starting audio capture:', error);
+      
+      // Clean up any partially created resources
+      this.cleanupAudioResources();
+      
+      // Provide specific error messages
+      let errorMessage = 'Failed to start audio capture: ';
+      
+      if (error.message?.includes('NotAllowedError') || error.name === 'NotAllowedError') {
+        errorMessage += 'Please allow microphone permission in your browser.';
+      } else if (error.message?.includes('NotFoundError') || error.name === 'NotFoundError') {
+        errorMessage += 'No microphone device found. Please check your audio setup.';
+      } else if (error.message?.includes('AudioWorklet') || error.message?.includes('ScriptProcessor')) {
+        errorMessage += 'Audio processing initialization failed. Please try refreshing the page.';
+      } else {
+        errorMessage += error.message || 'Unknown error occurred.';
+      }
+      
+      this.showError(errorMessage);
+      this.isRecording = false;
+    }
+  }
+
+  private cleanupAudioResources(): void {
+    try {
+      if (this.audioWorkletNode) {
+        this.audioWorkletNode.disconnect();
+        this.audioWorkletNode = null;
+      }
+      
+      if (this.mixerNode) {
+        this.mixerNode.disconnect();
+        this.mixerNode = null;
+      }
+      
+      if (this.sourceNode) {
+        this.sourceNode.disconnect();
+        this.sourceNode = null;
+      }
+      
+      if (this.audioContext) {
+        this.audioContext.close();
+        this.audioContext = null;
+      }
+      
+      if (this.microphoneStream) {
+        this.microphoneStream.getTracks().forEach(track => track.stop());
+        this.microphoneStream = null;
+      }
+      
+      if (this.systemStream) {
+        this.systemStream.getTracks().forEach(track => track.stop());
+        this.systemStream = null;
+      }
+      
+      if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+        this.mediaRecorder.stop();
+        this.mediaRecorder = null;
+      }
+      
+      this.audioSourceInfo = '';
+    } catch (cleanupError) {
+      console.warn('Error during audio resource cleanup:', cleanupError);
+    }
+  }
+
+  private async setupAudioWorklet(): Promise<void> {
+    try {
+      if (!this.audioContext) {
+        throw new Error('AudioContext not initialized');
+      }
+
+      console.log('Loading AudioWorklet using audio-worklet-loader...');
+      
+      try {
+        // Use the imported worklet URL from audio-worklet-loader
+        await this.audioContext.audioWorklet.addModule(audioProcessorWorkletUrl);
+        console.log('AudioWorklet loaded successfully from audio-worklet-loader');
+        
+        // Create AudioWorkletNode
+        this.audioWorkletNode = new AudioWorkletNode(this.audioContext, 'audio-processor');
+        
+        // Listen for processed audio data
+        this.audioWorkletNode.port.onmessage = (event) => {
+          if (event.data.type === 'audioData') {
+            this.handleAudioData(event.data.data);
+          }
+        };
+        
+        console.log('AudioWorklet setup completed successfully');
+        
+      } catch (workletError) {
+        console.error('AudioWorklet loading failed:', workletError);
+        throw workletError;
+      }
+      
+    } catch (error) {
+      console.error('Failed to setup AudioWorklet:', error);
+      console.log('Falling back to ScriptProcessorNode (deprecated but functional)');
+      
+      // Fallback to ScriptProcessorNode when AudioWorklet fails
+      this.setupScriptProcessorFallback();
+    }
+  }
+
+  private setupScriptProcessorFallback(): void {
+    try {
+      if (!this.audioContext) {
+        throw new Error('AudioContext not initialized for fallback');
+      }
+
+      console.log('Setting up ScriptProcessorNode fallback');
+      
+      // Create script processor node as fallback
+      const bufferSize = 4096;
+      const processorNode = this.audioContext.createScriptProcessor(bufferSize, 1, 1);
+      
+      // Process raw audio data
+      processorNode.onaudioprocess = (event) => {
+        if (this.currentSession && this.isRecording) {
+          const inputBuffer = event.inputBuffer;
+          const channelData = inputBuffer.getChannelData(0);
+          
+          // Simple downsampling for 16kHz (assuming 48kHz input)
+          const downsampleRatio = this.audioContext!.sampleRate / 16000;
+          const outputLength = Math.floor(channelData.length / downsampleRatio);
+          const downsampledData = new Float32Array(outputLength);
+          
+          for (let i = 0; i < outputLength; i++) {
+            const sourceIndex = Math.floor(i * downsampleRatio);
+            downsampledData[i] = channelData[sourceIndex];
+          }
+          
+          this.handleAudioData(downsampledData);
+        }
+      };
+      
+      // Store the processor node for connection and cleanup
+      this.audioWorkletNode = processorNode as any; // Type assertion for compatibility
+      
+      console.log('ScriptProcessorNode fallback setup completed');
+      
+    } catch (error) {
+      console.error('Failed to setup ScriptProcessorNode fallback:', error);
+      throw new Error('Both AudioWorklet and ScriptProcessorNode setup failed');
+    }
+  }
+
+  private handleAudioData(audioData: Float32Array): void {
+    if (this.currentSession && this.isRecording) {
+      // Store audio data for streaming
+      this.audioBuffer.push(new Float32Array(audioData));
+      
+      // Store complete recording
+      this.completeRawBuffer.push(new Float32Array(audioData));
+      
+      // Calculate total samples
+      const totalSamples = this.audioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
+      
+      // Send audio chunk every ~5 seconds
+      if (totalSamples >= this.CHUNK_DURATION_SAMPLES) {
+        if (!this.isProcessingChunk) {
+          this.isProcessingChunk = true;
+          
+          try {
+            this.processRawAudioBuffer();
+            this.audioBuffer = [];
+          } catch (error) {
+            console.error('Error in chunk processing:', error);
+            this.audioBuffer = [];
+          } finally {
+            this.isProcessingChunk = false;
+          }
+        }
+      }
+      
+      // Emergency safety: if buffer gets too large, force clear it
+      if (totalSamples > this.CHUNK_DURATION_SAMPLES * 2) {
+        console.warn('Audio buffer too large, forcing clear');
+        this.audioBuffer = [];
+      }
+    }
+  }
+
+  private startMediaRecorderFallback(): void {
+    try {
+      if (!this.microphoneStream) return;
+      
+      this.mediaRecorder = new MediaRecorder(this.microphoneStream, {
+        mimeType: 'audio/webm;codecs=opus'
+      });
+
+      this.audioChunks = [];
+
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          this.audioChunks.push(event.data);
+        }
+      };
+
+      this.mediaRecorder.start(5000); // Record in 5-second chunks
+      console.log('MediaRecorder fallback started with 5-second intervals');
+      
+    } catch (error) {
+      console.error('MediaRecorder fallback failed:', error);
+    }
+  }
+
+  private processRawAudioBuffer(): void {
+    if (!this.currentSession || this.audioBuffer.length === 0) return;
+
+    try {
+      // Calculate current buffer size
+      const currentBufferSamples = this.audioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
+      
+      console.log(`=== CHUNK PROCESSING DEBUG ===`);
+      console.log(`Processing audio buffer: ${(currentBufferSamples / 16000).toFixed(1)}s (${currentBufferSamples} samples, ${this.audioBuffer.length} chunks)`);
+      
+      // Combine all audio chunks into a single buffer
+      const combinedAudioBuffer = new Float32Array(currentBufferSamples);
+      
+      let offset = 0;
+      for (const chunk of this.audioBuffer) {
+        combinedAudioBuffer.set(chunk, offset);
+        offset += chunk.length;
+      }
+      
+      // Convert Float32Array to Int16Array (16-bit PCM)
+      const pcmData = new Int16Array(combinedAudioBuffer.length);
+      for (let i = 0; i < combinedAudioBuffer.length; i++) {
+        // Clamp to [-1, 1] and convert to 16-bit
+        const sample = Math.max(-1, Math.min(1, combinedAudioBuffer[i]));
+        pcmData[i] = sample * 0x7FFF;
+      }
+      
+      // Convert to bytes
+      const audioBytes = new Uint8Array(pcmData.buffer);
+      
+      console.log(`Final audio bytes: ${audioBytes.length} bytes`);
+      console.log(`Expected for ${(currentBufferSamples / 16000).toFixed(1)}s: ${(currentBufferSamples * 2).toFixed(0)} bytes (16-bit PCM)`);
+      
+      // Convert to base64
+      const base64Audio = this.arrayBufferToBase64(audioBytes);
+      console.log(`Base64 conversion result: ${base64Audio.length} characters`);
+      console.log(`Base64 sample: ${base64Audio.substring(0, 50)}...`);
+      console.log(`=== END DEBUG ===`);
+      
+      // Send to server
+      this.liveTranscriptionService.sendAudioChunk(
+        this.currentSession.session_id, 
+        base64Audio
+      );
+      
+    } catch (error) {
+      console.error('Error processing audio buffer:', error);
+    }
+  }
+
+  private arrayBufferToBase64(buffer: Uint8Array): string {
+    try {
+      console.log(`Converting ${buffer.length} bytes to base64...`);
+      
+      // For smaller buffers, use the direct method
+      if (buffer.length < 50000) {
+        console.log('Using direct conversion method');
+        const binaryString = Array.from(buffer, byte => String.fromCharCode(byte)).join('');
+        const result = btoa(binaryString);
+        console.log(`Direct conversion completed: ${result.length} chars`);
+        return result;
+      }
+      
+      console.log('Using chunked conversion method');
+      
+      // For larger buffers, use a chunking approach
+      let binary = '';
+      const chunkSize = 32768; // 32KB chunks (safe for String.fromCharCode)
+      const totalChunks = Math.ceil(buffer.length / chunkSize);
+      console.log(`Processing ${totalChunks} chunks of ${chunkSize} bytes each`);
+      
+      for (let i = 0; i < buffer.length; i += chunkSize) {
+        const chunk = buffer.slice(i, i + chunkSize);
+        // Convert chunk to string character by character (safer than apply)
+        let chunkString = '';
+        for (let j = 0; j < chunk.length; j++) {
+          chunkString += String.fromCharCode(chunk[j]);
+        }
+        binary += chunkString;
+        
+        if ((i / chunkSize + 1) % 10 === 0) {
+          console.log(`Processed chunk ${i / chunkSize + 1}/${totalChunks}`);
+        }
+      }
+      
+      console.log(`Binary string length: ${binary.length}, encoding to base64...`);
+      
+      // Now encode the complete binary string as base64
+      const result = btoa(binary);
+      console.log(`Chunked conversion completed: ${result.length} chars`);
+      return result;
+      
+    } catch (error) {
+      console.error('Error converting to base64:', error);
+      
+      // Ultimate fallback: convert byte by byte
+      try {
+        console.log('Using byte-by-byte fallback conversion');
+        let binary = '';
+        for (let i = 0; i < buffer.length; i++) {
+          binary += String.fromCharCode(buffer[i]);
+        }
+        const result = btoa(binary);
+        console.log(`Fallback conversion completed: ${result.length} chars`);
+        return result;
+      } catch (finalError) {
+        console.error('Final fallback base64 conversion failed:', finalError);
+        throw new Error('Failed to convert audio to base64');
+      }
+    }
+  }
+
+  private createWavFile(audioData: Uint8Array, sampleRate: number, channels: number, bitsPerSample: number): Uint8Array {
+    const byteRate = sampleRate * channels * bitsPerSample / 8;
+    const blockAlign = channels * bitsPerSample / 8;
+    const dataSize = audioData.length;
+    const fileSize = 36 + dataSize;
+    
+    const buffer = new ArrayBuffer(44 + dataSize);
+    const view = new DataView(buffer);
+    
+    // WAV header
+    const writeString = (offset: number, string: string) => {
+      for (let i = 0; i < string.length; i++) {
+        view.setUint8(offset + i, string.charCodeAt(i));
+      }
+    };
+    
+    writeString(0, 'RIFF');
+    view.setUint32(4, fileSize, true);
+    writeString(8, 'WAVE');
+    writeString(12, 'fmt ');
+    view.setUint32(16, 16, true);
+    view.setUint16(20, 1, true);
+    view.setUint16(22, channels, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, byteRate, true);
+    view.setUint16(32, blockAlign, true);
+    view.setUint16(34, bitsPerSample, true);
+    writeString(36, 'data');
+    view.setUint32(40, dataSize, true);
+    
+    // Audio data
+    const audioView = new Uint8Array(buffer, 44);
+    audioView.set(audioData);
+    
+    return new Uint8Array(buffer);
+  }
+
+  private downloadBlob(blob: Blob, filename: string): void {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.style.display = 'none';
+    
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    URL.revokeObjectURL(url);
+  }
+
+  private stopAudioCapture(): void {
+    // Accumulate audio from this recording session
+    if (this.completeRawBuffer.length > 0) {
+      this.accumulatedRawBuffer.push(...this.completeRawBuffer);
+      console.log(`Accumulated raw audio chunks: ${this.accumulatedRawBuffer.length} total`);
+    }
+    
+    if (this.audioChunks.length > 0) {
+      this.accumulatedAudioChunks.push(...this.audioChunks);
+      console.log(`Accumulated MediaRecorder chunks: ${this.accumulatedAudioChunks.length} total`);
+    }
+    
+    // Stop AudioWorklet
+    if (this.audioWorkletNode) {
+      this.audioWorkletNode.disconnect();
+      this.audioWorkletNode = null;
+    }
+    
+    // Stop mixer and source nodes
+    if (this.mixerNode) {
+      this.mixerNode.disconnect();
+      this.mixerNode = null;
+    }
+    
+    if (this.sourceNode) {
+      this.sourceNode.disconnect();
+      this.sourceNode = null;
+    }
+    
+    if (this.audioContext) {
+      this.audioContext.close();
+      this.audioContext = null;
+    }
+    
+    // Stop MediaRecorder
+    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
+      this.mediaRecorder.stop();
+    }
+    this.mediaRecorder = null;
+    
+    // Stop audio streams
+    if (this.microphoneStream) {
+      this.microphoneStream.getTracks().forEach(track => track.stop());
+      this.microphoneStream = null;
+    }
+    
+    if (this.systemStream) {
+      this.systemStream.getTracks().forEach(track => track.stop());
+      this.systemStream = null;
+    }
+    
+    // Clear current session buffers (but keep accumulated ones)
+    this.audioChunks = [];
+    this.audioBuffer = [];
+    this.completeRawBuffer = [];
+    this.isProcessingChunk = false;
+    this.audioSourceInfo = '';
+    
+    this.showInfo(`Recording stopped. Total accumulated audio: ${this.accumulatedAudioChunks.length + this.accumulatedRawBuffer.length} chunks`);
+  }
+
+  // Status methods
+  getStatusText(): string {
+    if (!this.isConnected) return 'Disconnected';
+    if (this.isProcessingSummary) return 'Processing Summary...';
+    if (!this.currentSession) return 'No active session';
+    if (this.isRecording) return 'Recording...';
+    if (this.isPaused) return 'Paused';
+    return 'Ready';
+  }
+
+  getStatusColor(): string {
+    if (!this.isConnected) return 'warn';
+    if (this.isProcessingSummary) return 'accent';
+    if (!this.currentSession) return 'accent';
+    if (this.isRecording) return 'primary';
+    return 'primary';
+  }
+
+  // Helper methods for button states
+  canCreateSession(): boolean {
+    const result = this.isConnected && !this.isCreatingSession && !this.currentSession && !this.isProcessingSummary;
+    if (!result) {
+      console.log('canCreateSession false because:', {
+        isConnected: this.isConnected,
+        isCreatingSession: this.isCreatingSession,
+        currentSession: this.currentSession,
+        isProcessingSummary: this.isProcessingSummary
+      });
+    }
+    return result;
+  }
+
+  canStartRecording(): boolean {
+    return !!this.currentSession && !this.isRecording && !this.isProcessingSummary;
+  }
+
+  canStopRecording(): boolean {
+    return !!this.currentSession && this.isRecording && !this.isProcessingSummary;
+  }
+
+  canEndSession(): boolean {
+    return !!this.currentSession && !this.isProcessingSummary;
+  }
+
+  getRecordingButtonText(): string {
+    return this.isPaused ? 'Resume Recording' : 'Start Recording';
+  }
+
+  getEndSessionButtonText(): string {
+    return this.isProcessingSummary ? 'Processing...' : 'End Session';
+  }
+
+  hasAccumulatedAudio(): boolean {
+    return this.accumulatedAudioChunks.length > 0 || this.accumulatedRawBuffer.length > 0;
+  }
+
+  private showSuccess(message: string): void {
+    this.snackBar.open(message, 'Close', {
+      duration: 3000,
+      panelClass: ['success-snackbar']
+    });
+  }
+
+  private showError(message: string): void {
+    this.snackBar.open(message, 'Close', {
+      duration: 5000,
+      panelClass: ['error-snackbar']
+    });
+  }
+
+  private showInfo(message: string): void {
+    this.snackBar.open(message, 'Close', {
+      duration: 3000,
+      panelClass: ['info-snackbar']
+    });
+  }
+
+  trackByLine(index: number, line: string): number {
+    return index;
+  }
+
+  extractTimestamp(line: string): string | null {
+    const timestampMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
+    return timestampMatch ? timestampMatch[1] : null;
+  }
+
+  removeTimestamp(line: string): string {
+    return line.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '');
   }
 
   stopSession(): void {
@@ -498,11 +1418,13 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
     // Ask if user wants to generate summary
     const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
       width: '400px',
+      panelClass: 'dark-dialog',
       data: {
         title: 'End Session',
-        message: 'Would you like to generate a summary and analysis of this session? This will process all recorded audio using our AI analysis.',
+        message: 'Would you like to generate a summary and analysis of this session?',
+        subMessage: 'This will process all recorded audio using our AI analysis.',
         confirmText: 'Generate Summary',
-        cancelText: 'End Without Summary'
+        cancelText: 'End'
       }
     });
 
@@ -700,481 +1622,79 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
     this.showInfo('Transcript cleared');
   }
 
-  private async startAudioCapture(): Promise<void> {
-    try {
-      // Get microphone access
-      this.audioStream = await navigator.mediaDevices.getUserMedia({ 
-        audio: {
-          sampleRate: 16000,
-          channelCount: 1,
-          echoCancellation: true,
-          noiseSuppression: true
-        } 
-      });
-      
-      // Create Audio Context
-      this.audioContext = new AudioContext({ sampleRate: 16000 });
-      
-      // Create source node from stream
-      this.sourceNode = this.audioContext.createMediaStreamSource(this.audioStream);
-      
-      // Create script processor node for raw audio data
-      this.processorNode = this.audioContext.createScriptProcessor(this.bufferSize, 1, 1);
-      
-      // Reset audio buffers and counter
-      this.audioBuffer = [];
-      this.chunkCounter = 0;
-      
-      // Process raw audio data
-      this.processorNode.onaudioprocess = (event) => {
-        if (this.currentSession && this.isRecording) {
-          const inputBuffer = event.inputBuffer;
-          const channelData = inputBuffer.getChannelData(0);
-          
-          // Store audio data for streaming
-          this.audioBuffer.push(new Float32Array(channelData));
-          
-          // Store complete recording
-          this.completeRawBuffer.push(new Float32Array(channelData));
-          
-          // Safety check: prevent buffer from growing too large
-          const totalSamples = this.audioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
-          
-          // Send audio chunk every ~15 seconds
-          if (totalSamples >= this.CHUNK_DURATION_SAMPLES) {
-            // Prevent recursive calls by temporarily disabling processing
-            if (!this.isProcessingChunk) {
-              this.isProcessingChunk = true;
-              
-              try {
-                this.processRawAudioBuffer();
-                
-                // Reset main buffer but keep overlap
-                this.audioBuffer = [];
-              } catch (error) {
-                console.error('Error in chunk processing:', error);
-                this.audioBuffer = []; // Clear buffer to prevent infinite loop
-              } finally {
-                this.isProcessingChunk = false;
-              }
-            }
-          }
-          
-          // Emergency safety: if buffer gets too large, force clear it
-          if (totalSamples > this.CHUNK_DURATION_SAMPLES * 2) {
-            console.warn('Audio buffer too large, forcing clear');
-            this.audioBuffer = [];
-          }
-        }
-      };
-      
-      // Connect the nodes
-      this.sourceNode.connect(this.processorNode);
-      this.processorNode.connect(this.audioContext.destination);
-      
-      // Also start MediaRecorder for fallback/debugging
-      this.startMediaRecorderFallback();
-      
-      this.showSuccess('Audio capture started using Web Audio API');
-      
-    } catch (error) {
-      console.error('Error accessing microphone:', error);
-      this.showError('Failed to access microphone. Please check permissions.');
-      this.isRecording = false;
-    }
-  }
-
-  private startMediaRecorderFallback(): void {
-    try {
-      if (!this.audioStream) return;
-      
-      this.mediaRecorder = new MediaRecorder(this.audioStream, {
-        mimeType: 'audio/webm;codecs=opus'
-      });
-
-      this.audioChunks = [];
-
-      this.mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          this.audioChunks.push(event.data);
-        }
-      };
-
-      this.mediaRecorder.start(15000); // Record in 15-second chunks
-      console.log('MediaRecorder fallback started with 15-second intervals');
-      
-    } catch (error) {
-      console.error('MediaRecorder fallback failed:', error);
-    }
-  }
-
-  private processRawAudioBuffer(): void {
-    if (!this.currentSession || this.audioBuffer.length === 0) return;
-
-    try {
-      // Calculate current buffer size
-      const currentBufferSamples = this.audioBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
-      
-      console.log(`=== CHUNK PROCESSING DEBUG ===`);
-      console.log(`Processing audio buffer: ${(currentBufferSamples / 16000).toFixed(1)}s (${currentBufferSamples} samples, ${this.audioBuffer.length} chunks)`);
-      
-      // Combine all audio chunks into a single buffer
-      const combinedAudioBuffer = new Float32Array(currentBufferSamples);
-      
-      let offset = 0;
-      for (const chunk of this.audioBuffer) {
-        combinedAudioBuffer.set(chunk, offset);
-        offset += chunk.length;
+  private showBrowserSpecificHelp(): void {
+    const userAgent = navigator.userAgent.toLowerCase();
+    
+    setTimeout(() => {
+      if (userAgent.includes('chrome')) {
+        this.showChromeAudioSetupDialog();
+      } else if (userAgent.includes('edge')) {
+        this.showInfo('Edge: System audio capture should work. Make sure to select "Share audio" when prompted.');
+      } else if (userAgent.includes('firefox')) {
+        this.showInfo('Firefox: Limited system audio support. Consider switching to Chrome or Edge for best experience.');
+      } else if (userAgent.includes('safari')) {
+        this.showInfo('Safari: System audio capture not supported. Please use Chrome or Edge.');
+      } else {
+        this.showInfo('For best system audio capture support, please use Chrome or Edge browsers.');
       }
-      
-      // Convert Float32Array to Int16Array (16-bit PCM)
-      const pcmData = new Int16Array(combinedAudioBuffer.length);
-      for (let i = 0; i < combinedAudioBuffer.length; i++) {
-        // Clamp to [-1, 1] and convert to 16-bit
-        const sample = Math.max(-1, Math.min(1, combinedAudioBuffer[i]));
-        pcmData[i] = sample * 0x7FFF;
+    }, 2000);
+  }
+
+  private showChromeAudioSetupDialog(): void {
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '500px',
+      panelClass: 'dark-dialog',
+      data: {
+        title: 'Enable Chrome Audio Capture',
+        message: 'Chrome requires experimental features to be enabled for system audio capture.',
+        subMessage: `Steps to fix:
+1. Open a new tab and go to: chrome://flags
+2. Search for "Experimental Web Platform features"
+3. Enable this flag
+4. Restart Chrome
+5. Try system audio capture again
+
+This will enable full system audio capture functionality.`,
+        confirmText: 'Open Chrome Flags',
+        cancelText: 'Continue Anyway'
       }
-      
-      // Convert to bytes
-      const audioBytes = new Uint8Array(pcmData.buffer);
-      
-      console.log(`Final audio bytes: ${audioBytes.length} bytes`);
-      console.log(`Expected for ${(currentBufferSamples / 16000).toFixed(1)}s: ${(currentBufferSamples * 2).toFixed(0)} bytes (16-bit PCM)`);
-      
-      // Convert to base64
-      const base64Audio = this.arrayBufferToBase64(audioBytes);
-      console.log(`Base64 conversion result: ${base64Audio.length} characters`);
-      console.log(`Base64 sample: ${base64Audio.substring(0, 50)}...`);
-      console.log(`=== END DEBUG ===`);
-      
-      // Send to server
-      this.liveTranscriptionService.sendAudioChunk(
-        this.currentSession.session_id, 
-        base64Audio
-      );
-      
-    } catch (error) {
-      console.error('Error processing audio buffer:', error);
-    }
-  }
+    });
 
-  private arrayBufferToBase64(buffer: Uint8Array): string {
-    try {
-      console.log(`Converting ${buffer.length} bytes to base64...`);
-      
-      // For smaller buffers, use the direct method
-      if (buffer.length < 50000) {
-        console.log('Using direct conversion method');
-        const binaryString = Array.from(buffer, byte => String.fromCharCode(byte)).join('');
-        const result = btoa(binaryString);
-        console.log(`Direct conversion completed: ${result.length} chars`);
-        return result;
+    dialogRef.afterClosed().subscribe(result => {
+      if (result === true) {
+        // Open chrome://flags in a new tab
+        window.open('chrome://flags/#enable-experimental-web-platform-features', '_blank');
       }
-      
-      console.log('Using chunked conversion method');
-      
-      // For larger buffers, we need to use FileReader or similar approach
-      // But since we can't use async here, let's try a different chunking approach
-      // that maintains base64 integrity
-      
-      let binary = '';
-      const chunkSize = 32768; // 32KB chunks (safe for String.fromCharCode)
-      const totalChunks = Math.ceil(buffer.length / chunkSize);
-      console.log(`Processing ${totalChunks} chunks of ${chunkSize} bytes each`);
-      
-      for (let i = 0; i < buffer.length; i += chunkSize) {
-        const chunk = buffer.slice(i, i + chunkSize);
-        // Convert chunk to string character by character (safer than apply)
-        let chunkString = '';
-        for (let j = 0; j < chunk.length; j++) {
-          chunkString += String.fromCharCode(chunk[j]);
-        }
-        binary += chunkString;
-        
-        if ((i / chunkSize + 1) % 10 === 0) {
-          console.log(`Processed chunk ${i / chunkSize + 1}/${totalChunks}`);
-        }
-      }
-      
-      console.log(`Binary string length: ${binary.length}, encoding to base64...`);
-      
-      // Now encode the complete binary string as base64
-      const result = btoa(binary);
-      console.log(`Chunked conversion completed: ${result.length} chars`);
-      return result;
-      
-    } catch (error) {
-      console.error('Error converting to base64:', error);
-      
-      // Ultimate fallback: convert byte by byte
-      try {
-        console.log('Using byte-by-byte fallback conversion');
-        let binary = '';
-        for (let i = 0; i < buffer.length; i++) {
-          binary += String.fromCharCode(buffer[i]);
-        }
-        const result = btoa(binary);
-        console.log(`Fallback conversion completed: ${result.length} chars`);
-        return result;
-      } catch (finalError) {
-        console.error('Final fallback base64 conversion failed:', finalError);
-        throw new Error('Failed to convert audio to base64');
-      }
-    }
-  }
-
-  private saveCompleteRawRecording(): void {
-    if (this.completeRawBuffer.length === 0) {
-      console.log('No raw audio to save');
-      return;
-    }
-    
-    try {
-      // Combine all raw audio data
-      const totalLength = this.completeRawBuffer.reduce((sum, chunk) => sum + chunk.length, 0);
-      const combinedBuffer = new Float32Array(totalLength);
-      
-      let offset = 0;
-      for (const chunk of this.completeRawBuffer) {
-        chunk.forEach((sample, index) => {
-          combinedBuffer[offset + index] = sample;
-        });
-        offset += chunk.length;
-      }
-      
-      // Convert Float32Array to Int16Array (16-bit PCM)
-      const pcmData = new Int16Array(combinedBuffer.length);
-      for (let i = 0; i < combinedBuffer.length; i++) {
-        const sample = Math.max(-1, Math.min(1, combinedBuffer[i]));
-        pcmData[i] = sample * 0x7FFF;
-      }
-      
-      // Convert to bytes
-      const audioBytes = new Uint8Array(pcmData.buffer);
-      
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      
-      // Save as raw PCM data
-      const pcmFilename = `complete-raw-recording-${timestamp}.pcm`;
-      const pcmBlob = new Blob([audioBytes], { type: 'application/octet-stream' });
-      this.downloadBlob(pcmBlob, pcmFilename);
-      
-      // Also create a proper WAV file for testing
-      const wavData = this.createWavFile(audioBytes, 16000, 1, 16);
-      const wavFilename = `complete-raw-recording-${timestamp}.wav`;
-      const wavBlob = new Blob([wavData], { type: 'audio/wav' });
-      this.downloadBlob(wavBlob, wavFilename);
-      
-      const duration = (totalLength / 16000).toFixed(1);
-      console.log(`Saved complete raw recording: ${pcmFilename}, ${wavFilename} (${audioBytes.length} bytes, ${duration}s)`);
-      this.showSuccess(`Raw recording saved: ${wavFilename} (${duration}s)`);
-      
-    } catch (error) {
-      console.error('Error saving complete raw recording:', error);
-      this.showError('Failed to save raw recording');
-    }
-  }
-
-  private downloadBlob(blob: Blob, filename: string): void {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    a.style.display = 'none';
-    
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    
-    URL.revokeObjectURL(url);
-  }
-
-  private createWavFile(audioData: Uint8Array, sampleRate: number, channels: number, bitsPerSample: number): Uint8Array {
-    const byteRate = sampleRate * channels * bitsPerSample / 8;
-    const blockAlign = channels * bitsPerSample / 8;
-    const dataSize = audioData.length;
-    const fileSize = 36 + dataSize;
-    
-    const buffer = new ArrayBuffer(44 + dataSize);
-    const view = new DataView(buffer);
-    
-    // WAV header
-    const writeString = (offset: number, string: string) => {
-      for (let i = 0; i < string.length; i++) {
-        view.setUint8(offset + i, string.charCodeAt(i));
-      }
-    };
-    
-    writeString(0, 'RIFF');
-    view.setUint32(4, fileSize, true);
-    writeString(8, 'WAVE');
-    writeString(12, 'fmt ');
-    view.setUint32(16, 16, true);
-    view.setUint16(20, 1, true);
-    view.setUint16(22, channels, true);
-    view.setUint32(24, sampleRate, true);
-    view.setUint32(28, byteRate, true);
-    view.setUint16(32, blockAlign, true);
-    view.setUint16(34, bitsPerSample, true);
-    writeString(36, 'data');
-    view.setUint32(40, dataSize, true);
-    
-    // Audio data
-    const audioView = new Uint8Array(buffer, 44);
-    audioView.set(audioData);
-    
-    return new Uint8Array(buffer);
-  }
-
-  private saveCompleteRecording(): void {
-    if (this.audioChunks.length === 0) return;
-    
-    const completeBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
-    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-    const filename = `complete-mediarecorder-${timestamp}.webm`;
-    
-    this.downloadBlob(completeBlob, filename);
-    
-    console.log(`Saved complete MediaRecorder recording: ${filename}, size: ${completeBlob.size} bytes, chunks: ${this.audioChunks.length}`);
-    this.showSuccess(`Complete MediaRecorder recording saved: ${filename}`);
-  }
-
-  private stopAudioCapture(): void {
-    // Accumulate audio from this recording session
-    if (this.completeRawBuffer.length > 0) {
-      this.accumulatedRawBuffer.push(...this.completeRawBuffer);
-      console.log(`Accumulated raw audio chunks: ${this.accumulatedRawBuffer.length} total`);
-    }
-    
-    if (this.audioChunks.length > 0) {
-      this.accumulatedAudioChunks.push(...this.audioChunks);
-      console.log(`Accumulated MediaRecorder chunks: ${this.accumulatedAudioChunks.length} total`);
-    }
-    
-    // Stop Web Audio API
-    if (this.processorNode) {
-      this.processorNode.disconnect();
-      this.processorNode = null;
-    }
-    
-    if (this.sourceNode) {
-      this.sourceNode.disconnect();
-      this.sourceNode = null;
-    }
-    
-    if (this.audioContext) {
-      this.audioContext.close();
-      this.audioContext = null;
-    }
-    
-    // Stop MediaRecorder
-    if (this.mediaRecorder && this.mediaRecorder.state !== 'inactive') {
-      this.mediaRecorder.stop();
-    }
-    this.mediaRecorder = null;
-    
-    // Stop audio stream
-    if (this.audioStream) {
-      this.audioStream.getTracks().forEach(track => track.stop());
-      this.audioStream = null;
-    }
-    
-    // Clear current session buffers (but keep accumulated ones)
-    this.audioChunks = [];
-    this.audioBuffer = [];
-    this.completeRawBuffer = [];
-    this.isProcessingChunk = false; // Reset processing flag
-    
-    this.showInfo(`Recording stopped. Total accumulated audio: ${this.accumulatedAudioChunks.length + this.accumulatedRawBuffer.length} chunks`);
-  }
-
-  // Status methods
-  getStatusText(): string {
-    if (!this.isConnected) return 'Disconnected';
-    if (this.isProcessingSummary) return 'Processing Summary...';
-    if (!this.currentSession) return 'No active session';
-    if (this.isRecording) return 'Recording...';
-    if (this.isPaused) return 'Paused';
-    return 'Ready';
-  }
-
-  getStatusColor(): string {
-    if (!this.isConnected) return 'warn';
-    if (this.isProcessingSummary) return 'accent';
-    if (!this.currentSession) return 'accent';
-    if (this.isRecording) return 'primary';
-    return 'primary';
-  }
-
-  // Helper methods for button states
-  canCreateSession(): boolean {
-    const result = this.isConnected && !this.isCreatingSession && !this.currentSession && !this.isProcessingSummary;
-    if (!result) {
-      console.log('canCreateSession false because:', {
-        isConnected: this.isConnected,
-        isCreatingSession: this.isCreatingSession,
-        currentSession: this.currentSession,
-        isProcessingSummary: this.isProcessingSummary
-      });
-    }
-    return result;
-  }
-
-  canStartRecording(): boolean {
-    return !!this.currentSession && !this.isRecording && !this.isProcessingSummary;
-  }
-
-  canStopRecording(): boolean {
-    return !!this.currentSession && this.isRecording && !this.isProcessingSummary;
-  }
-
-  canEndSession(): boolean {
-    return !!this.currentSession && !this.isProcessingSummary;
-  }
-
-  getRecordingButtonText(): string {
-    return this.isPaused ? 'Resume Recording' : 'Start Recording';
-  }
-
-  getEndSessionButtonText(): string {
-    return this.isProcessingSummary ? 'Processing...' : 'End Session';
-  }
-
-  hasAccumulatedAudio(): boolean {
-    return this.accumulatedAudioChunks.length > 0 || this.accumulatedRawBuffer.length > 0;
-  }
-
-  private showSuccess(message: string): void {
-    this.snackBar.open(message, 'Close', {
-      duration: 3000,
-      panelClass: ['success-snackbar']
     });
   }
 
-  private showError(message: string): void {
-    this.snackBar.open(message, 'Close', {
-      duration: 5000,
-      panelClass: ['error-snackbar']
-    });
-  }
-
-  private showInfo(message: string): void {
-    this.snackBar.open(message, 'Close', {
-      duration: 3000,
-      panelClass: ['info-snackbar']
-    });
-  }
-
-  trackByLine(index: number, line: string): number {
-    return index;
-  }
-
-  extractTimestamp(line: string): string | null {
-    const timestampMatch = line.match(/^\[(\d{2}:\d{2}:\d{2})\]/);
-    return timestampMatch ? timestampMatch[1] : null;
-  }
-
-  removeTimestamp(line: string): string {
-    return line.replace(/^\[\d{2}:\d{2}:\d{2}\]\s*/, '');
+  private async captureDisplayAudio(audioOpts: MediaTrackConstraints): Promise<MediaStream | null> {
+    // Helper to try capture with audio only, then fallback to audio+video
+    try {
+      const opts: DisplayMediaStreamOptions = {
+        video: false,
+        audio: audioOpts
+      } as any;
+      return await navigator.mediaDevices.getDisplayMedia(opts);
+    } catch (err: any) {
+      if (err && err.name === 'NotSupportedError') {
+        try {
+          console.warn('Audio-only capture not supported, retrying with video+audio...');
+          const opts: DisplayMediaStreamOptions = {
+            video: {
+              cursor: 'never'
+            },
+            audio: audioOpts
+          } as any;
+          const stream = await navigator.mediaDevices.getDisplayMedia(opts);
+          // Immediately stop video tracks to save resources
+          stream.getVideoTracks().forEach(t => t.stop());
+          return stream;
+        } catch (err2) {
+          throw err2; // propagate
+        }
+      }
+      throw err;
+    }
   }
 } 

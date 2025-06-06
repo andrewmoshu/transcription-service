@@ -91,6 +91,24 @@
   color: #00b4d8 !important;
 }
 
+.status-bar mat-chip.accent {
+  background: rgba(156, 39, 176, 0.1) !important;
+  border-color: rgba(156, 39, 176, 0.3) !important;
+  color: #9c27b0 !important;
+}
+
+.status-bar mat-chip.primary {
+  background: rgba(33, 150, 243, 0.1) !important;
+  border-color: rgba(33, 150, 243, 0.3) !important;
+  color: #2196f3 !important;
+}
+
+.status-bar mat-chip.info {
+  background: rgba(76, 175, 80, 0.1) !important;
+  border-color: rgba(76, 175, 80, 0.3) !important;
+  color: #4caf50 !important;
+}
+
 .status-bar mat-chip mat-icon {
   font-size: 16px;
   width: 16px;

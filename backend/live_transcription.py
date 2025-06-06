@@ -199,8 +199,8 @@ class LiveTranscriptionSession:
                     chunk = self.audio_queue.get(timeout=1.0)
                     audio_buffer.write(chunk)
                     
-                    # Process when we have enough audio (e.g., 3 seconds worth)
-                    if audio_buffer.tell() >= 48000 * 2 * 3:  # 3 seconds at 16kHz, 16-bit
+                    # Process when we have enough audio (e.g., 5 seconds worth)
+                    if audio_buffer.tell() >= 48000 * 2 * 5:  # 5 seconds at 16kHz, 16-bit
                         self._transcribe_buffer(audio_buffer.getvalue())
                         audio_buffer = io.BytesIO()  # Reset buffer
                         
