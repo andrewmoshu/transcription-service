@@ -9,5 +9,4 @@ flask
 flask-cors
 flask-socketio
 pyaudio
-websockets
-uuid 
+websockets 

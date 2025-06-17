@@ -206,6 +206,32 @@ transcriber/
 - WebSocket client
 - Asyncio for concurrent operations
 
+## 🔐 Authentication
+
+The application now includes password protection for administrative functions:
+
+### Protected Features
+- Creating new transcription sessions
+- Uploading audio files for meeting analysis
+- Managing sessions (start, stop, delete)
+- Enabling/disabling session sharing
+
+### Setup
+1. Create a `.env` file in the backend directory
+2. Add the admin password:
+   ```env
+   ADMIN_PASSWORD=your-secure-password-here
+   ```
+3. The default password is `admin123` for development (change this in production!)
+
+### Public Access
+Users without the admin password can still:
+- View shared live transcription sessions
+- Access saved transcripts via "My Transcripts"
+- View shared session summaries
+
+For detailed authentication setup, see `backend/AUTH_SETUP.md`
+
 ## 📝 Usage
 
 ### File Analysis

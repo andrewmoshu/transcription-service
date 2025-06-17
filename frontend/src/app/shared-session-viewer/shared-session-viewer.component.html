@@ -59,7 +59,7 @@
         </div>
       </div>
 
-      <mat-tab-group class="content-tabs">
+      <mat-tab-group class="content-tabs" [(selectedIndex)]="activeTab">
         <!-- Live Transcript Tab -->
         <mat-tab label="Live Transcript">
           <div class="tab-content">
@@ -82,6 +82,29 @@
                   <mat-icon class="pulse">fiber_manual_record</mat-icon>
                   <span>Live Recording Active...</span>
                 </div>
+              </div>
+            </div>
+          </div>
+        </mat-tab>
+
+        <!-- Summary Tab -->
+        <mat-tab label="Summary" [disabled]="!sessionSummary">
+          <div class="tab-content">
+            <div class="summary-content">
+              <div *ngIf="!sessionSummary" class="empty-state">
+                <mat-icon>summarize</mat-icon>
+                <p>No summary available yet</p>
+                <p class="hint">A summary will be generated when the session ends</p>
+              </div>
+              
+              <div *ngIf="sessionSummary" class="content-section">
+                <div class="summary-header">
+                  <h3>Session Summary</h3>
+                  <span class="summary-date" *ngIf="sessionSummary.generated_at">
+                    Generated: {{sessionSummary.generated_at | date:'medium'}}
+                  </span>
+                </div>
+                <div class="summary-text">{{sessionSummary.summary}}</div>
               </div>
             </div>
           </div>

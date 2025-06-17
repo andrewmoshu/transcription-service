@@ -109,11 +109,23 @@
   color: #4caf50 !important;
 }
 
+.status-bar mat-chip.warning {
+  background: rgba(255, 152, 0, 0.1) !important;
+  border-color: rgba(255, 152, 0, 0.3) !important;
+  color: #ff9800 !important;
+}
+
 .status-bar mat-chip mat-icon {
   font-size: 16px;
   width: 16px;
   height: 16px;
   color: inherit !important;
+}
+
+.status-bar mat-chip .owner-indicator {
+  font-size: 0.75rem;
+  opacity: 0.8;
+  margin-left: 4px;
 }
 
 .control-panel {
@@ -367,11 +379,14 @@
   }
 }
 
-/* Mobile Responsive */
+/* Enhanced Mobile Responsive */
 @media (max-width: 768px) {
   .live-transcription-container {
     padding: 0.5rem;
     height: 100vh;
+    /* Mobile optimization */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .main-card .mat-mdc-card-header,
@@ -383,23 +398,49 @@
     flex-direction: column;
     align-items: stretch;
     gap: 1rem;
+    padding: 1rem;
   }
 
   .session-controls {
     justify-content: center;
+    gap: 0.75rem; /* Better spacing for mobile */
   }
 
   .control-button {
     min-width: auto;
     flex: 1;
+    /* Enhanced mobile touch targets */
+    min-height: 48px;
+    padding: 12px 16px;
+    font-size: 0.875rem;
+    -webkit-tap-highlight-color: rgba(0, 180, 216, 0.1);
+    touch-action: manipulation;
+  }
+  
+  /* Active state for better mobile feedback */
+  .control-button:active {
+    transform: scale(0.95);
+    transition: transform 0.1s ease;
   }
 
   .transcript-controls {
     justify-content: center;
+    gap: 0.5rem;
+  }
+  
+  /* Better mobile button sizing */
+  .transcript-controls .mat-mdc-icon-button {
+    min-width: 44px;
+    min-height: 44px;
+    -webkit-tap-highlight-color: rgba(0, 180, 216, 0.1);
   }
 
   .transcript-area {
     min-height: 250px;
+    max-height: 40vh; /* Responsive height for mobile */
+    /* Enhanced mobile scrolling */
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
   }
 
   .transcript-section {
@@ -408,6 +449,232 @@
 
   .main-card .mat-mdc-card-title {
     font-size: 1.25rem;
+  }
+  
+  /* Mobile-specific status bar adjustments */
+  .status-bar {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    padding: 0.75rem 1rem;
+  }
+  
+  .status-bar mat-chip {
+    min-height: 36px;
+    font-size: 0.75rem;
+  }
+  
+  /* Improved mobile transcript display */
+  .transcript-content {
+    font-size: 1rem; /* Larger text for mobile readability */
+    line-height: 1.6;
+  }
+  
+  .transcript-line {
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+    /* Better mobile touch targets */
+    min-height: 44px;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  .transcript-line .timestamp {
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+  
+  /* Recording indicator mobile adjustments */
+  .recording-indicator {
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+  }
+  
+  .recording-indicator mat-icon {
+    width: 20px;
+    height: 20px;
+    font-size: 20px;
+  }
+}
+
+/* Ultra-small screens (portrait phones) */
+@media (max-width: 480px) {
+  .live-transcription-container {
+    padding: 0.25rem;
+  }
+  
+  .main-card .mat-mdc-card-header,
+  .transcript-section {
+    padding: 0.75rem;
+  }
+  
+  .control-panel {
+    padding: 0.75rem;
+    gap: 0.75rem;
+  }
+  
+  .control-button {
+    min-height: 44px;
+    padding: 10px 12px;
+    font-size: 0.8125rem;
+  }
+  
+  .main-card .mat-mdc-card-title {
+    font-size: 1.125rem;
+  }
+  
+  .status-bar mat-chip {
+    min-height: 32px;
+    font-size: 0.6875rem;
+    padding: 6px 8px;
+  }
+  
+  .transcript-area {
+    min-height: 200px;
+    max-height: 35vh;
+  }
+  
+  .transcript-line {
+    padding: 0.5rem;
+    font-size: 0.9375rem;
+  }
+}
+
+/* Landscape orientation on mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .live-transcription-container {
+    height: 100vh;
+  }
+  
+  .control-panel {
+    flex-direction: row;
+    align-items: center;
+    padding: 0.75rem 1rem;
+  }
+  
+  .session-controls {
+    flex: 1;
+  }
+  
+  .transcript-controls {
+    flex: none;
+  }
+  
+  .transcript-area {
+    max-height: 50vh;
+  }
+}
+
+/* Touch device optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .control-button,
+  .transcript-controls .mat-mdc-icon-button {
+    /* Larger touch targets for touch devices */
+    min-width: 48px;
+    min-height: 48px;
+    padding: 12px;
+  }
+  
+  .transcript-line:hover {
+    /* Remove hover effects on touch devices */
+    background: transparent;
+  }
+  
+  /* Better visual feedback for touch */
+  .control-button:active,
+  .transcript-controls .mat-mdc-icon-button:active {
+    background: rgba(255, 255, 255, 0.1) !important;
+    transform: scale(0.95);
+  }
+}
+
+/* High DPI displays */
+@media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+  .recording-indicator mat-icon,
+  .control-button mat-icon,
+  .transcript-controls mat-icon {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+}
+
+/* Focus improvements for mobile accessibility */
+.control-button:focus-visible,
+.transcript-controls .mat-mdc-icon-button:focus-visible {
+  outline: 2px solid rgba(0, 180, 216, 0.5);
+  outline-offset: 2px;
+}
+
+/* Safe area support for notched devices */
+@media (max-width: 768px) {
+  .live-transcription-container {
+    padding-left: max(0.5rem, env(safe-area-inset-left));
+    padding-right: max(0.5rem, env(safe-area-inset-right));
+    padding-bottom: max(0.5rem, env(safe-area-inset-bottom));
+  }
+}
+
+/* Reconnection Notice Mobile Adjustments */
+@media (max-width: 768px) {
+  .reconnection-notice {
+    margin: 0 0.5rem 1rem 0.5rem;
+  }
+  
+  .notice-content {
+    padding: 1rem;
+    gap: 0.75rem;
+  }
+  
+  .notice-icon {
+    font-size: 24px;
+    width: 24px;
+    height: 24px;
+  }
+  
+  .notice-text h4 {
+    font-size: 0.9375rem;
+  }
+  
+  .notice-text p {
+    font-size: 0.8125rem;
+  }
+  
+  .session-info {
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  
+  .session-info small {
+    font-size: 0.75rem;
+  }
+  
+  .notice-actions {
+    margin-top: 0.75rem;
+  }
+  
+  .notice-actions button {
+    min-height: 40px;
+    padding: 8px 12px;
+    font-size: 0.8125rem;
+  }
+}
+
+/* Error states mobile adjustments */
+@media (max-width: 768px) {
+  .empty-state {
+    padding: 2rem 1rem;
+  }
+  
+  .empty-state mat-icon {
+    font-size: 48px;
+    width: 48px;
+    height: 48px;
+  }
+  
+  .empty-state p {
+    font-size: 0.9375rem;
+  }
+  
+  .empty-state .hint {
+    font-size: 0.8125rem;
   }
 }
 
@@ -515,4 +782,73 @@
 ::ng-deep .info-snackbar {
   background: rgba(0, 180, 216, 0.9) !important;
   color: white !important;
+}
+
+/* Reconnection Notice */
+.reconnection-notice {
+  margin: 0 1.5rem 1.5rem 1.5rem;
+}
+
+.notice-card {
+  background: rgba(255, 152, 0, 0.05) !important;
+  border: 1px solid rgba(255, 152, 0, 0.2) !important;
+  border-radius: 12px;
+  padding: 0 !important;
+}
+
+.notice-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.5rem;
+}
+
+.notice-icon {
+  color: #ff9800 !important;
+  font-size: 32px;
+  width: 32px;
+  height: 32px;
+  flex-shrink: 0;
+  margin-top: 4px;
+}
+
+.notice-text {
+  flex: 1;
+}
+
+.notice-text h4 {
+  margin: 0 0 0.5rem 0;
+  color: rgba(255, 255, 255, 0.95);
+  font-size: 1rem;
+  font-weight: 500;
+}
+
+.notice-text p {
+  margin: 0 0 0.75rem 0;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.875rem;
+  line-height: 1.4;
+}
+
+.session-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.session-info small {
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.75rem;
+}
+
+.notice-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 150px;
+}
+
+.notice-actions button {
+  border-radius: 8px !important;
 } 

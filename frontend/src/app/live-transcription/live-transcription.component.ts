@@ -17,12 +17,17 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatRadioModule } from '@angular/material/radio';
 import { Subject, interval, takeUntil, Subscription } from 'rxjs';
 import { AudioSourceDialogComponent, AudioSourceSelection } from '../audio-source-dialog/audio-source-dialog.component';
+import { AuthDialogComponent, AuthDialogData } from '../auth-dialog/auth-dialog.component';
+import { AuthService } from '../services/auth.service';
 import {
   LiveTranscriptionService,
   LiveSession,
   TranscriptUpdate,
   LiveTranscriptResponse,
-  SessionStatusUpdate
+  SessionStatusUpdate,
+  LiveSessionResponse,
+  SessionState,
+  SessionResumeResponse
 } from '../services/live-transcription.service';
 import { MeetingService, TranscriptionResponse } from '../services/meeting.service';
 
@@ -228,12 +233,21 @@ interface ConfirmationDialogData {
 export class LiveTranscriptionComponent implements OnInit, OnDestroy {
   // Session management
   currentSession: LiveSession | null = null;
+  ownerId: string | null = null; // Track session owner ID
   isConnected = false;
   isCreatingSession = false;
   isRecording = false;
   isPaused = false; // Track if we're between recording sessions
   isShared = false;
   shareUrl = '';
+  
+  // Reconnection state
+  hasResumableSession = false;
+  resumableSessionId: string | null = null;
+  resumableSessionState: SessionState | null = null;
+  isCheckingForResumableSession = false;
+  isResumingSession = false;
+  private isReconnectionDialogOpen = false; // Add flag to track dialog state
   
   // Transcript data
   transcriptLines: string[] = [];
@@ -274,19 +288,75 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
   constructor(
     private liveTranscriptionService: LiveTranscriptionService,
     private meetingService: MeetingService,
+    private authService: AuthService,
     private snackBar: MatSnackBar,
     private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
+    // Load owner ID from localStorage or generate new one
+    this.ownerId = localStorage.getItem('live-transcription-owner-id');
+    if (!this.ownerId) {
+      this.ownerId = this.generateOwnerId();
+      localStorage.setItem('live-transcription-owner-id', this.ownerId);
+    }
+    
     this.setupSubscriptions();
     this.checkHealth();
     this.loadAudioDevices();
+    
+    // Check for resumable sessions after a short delay to ensure service is ready
+    setTimeout(() => {
+      this.checkForResumableSession();
+    }, 1000);
+  }
+
+  private generateOwnerId(): string {
+    return 'owner-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+  }
+
+  private checkForResumableSession(): void {
+    if (!this.ownerId || !this.isConnected) {
+      return;
+    }
+
+    // Prevent redundant checks
+    if (this.isCheckingForResumableSession || this.isReconnectionDialogOpen) {
+      console.log('Already checking for resumable session or dialog open, skipping...');
+      return;
+    }
+
+    this.isCheckingForResumableSession = true;
+    
+    this.liveTranscriptionService.findResumableSession(this.ownerId).subscribe({
+      next: (response) => {
+        this.isCheckingForResumableSession = false;
+        
+        if (response.success && response.session_id && response.session_state) {
+          this.hasResumableSession = true;
+          this.resumableSessionId = response.session_id;
+          this.resumableSessionState = response.session_state;
+          
+          console.log('Found resumable session:', response.session_id);
+          this.showReconnectionPrompt();
+        } else {
+          console.log('No resumable session found');
+          this.hasResumableSession = false;
+        }
+      },
+      error: (error) => {
+        this.isCheckingForResumableSession = false;
+        console.error('Error checking for resumable session:', error);
+        this.hasResumableSession = false;
+      }
+    });
   }
 
   ngOnDestroy(): void {
     this.subscriptions.forEach(sub => sub.unsubscribe());
-    if (this.currentSession) {
+    if (this.currentSession && this.ownerId) {
+      // Notify server that owner is disconnecting
+      this.liveTranscriptionService.leaveSession(this.currentSession.session_id, this.ownerId);
       this.stopSession();
     }
     this.liveTranscriptionService.disconnect();
@@ -346,10 +416,16 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
     this.subscriptions.push(
       this.liveTranscriptionService.getConnectionStatus().subscribe(
         connected => {
-          console.log('Connection status changed:', connected);
+          const wasConnected = this.isConnected;
+          console.log('Connection status changed:', connected, 'Was connected:', wasConnected);
           this.isConnected = connected;
           if (connected) {
             this.showSuccess('Connected to live transcription server');
+            // Check for resumable sessions when we connect
+            if (this.ownerId && !this.currentSession && !this.isCheckingForResumableSession && !wasConnected) {
+              console.log('Triggering check for resumable session...');
+              this.checkForResumableSession();
+            }
           } else {
             this.showError('Disconnected from server');
           }
@@ -363,6 +439,16 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
         session => {
           console.log('Current session changed:', session?.session_id);
           this.currentSession = session;
+        }
+      )
+    );
+
+    // Session resumed
+    this.subscriptions.push(
+      this.liveTranscriptionService.getSessionResumed().subscribe(
+        data => {
+          console.log('Session resumed event received:', data);
+          this.handleSessionResumed(data);
         }
       )
     );
@@ -484,41 +570,66 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
   }
 
   createSession(): void {
-    if (this.isCreatingSession) return;
-    
+    if (this.isCreatingSession || this.currentSession) {
+      return;
+    }
+
     this.isCreatingSession = true;
-    this.showInfo('Creating new session...');
-    
-    this.liveTranscriptionService.createSession().subscribe({
-      next: (response) => {
+    console.log('Creating new session with owner ID:', this.ownerId);
+
+    this.liveTranscriptionService.createSession(this.ownerId || undefined).subscribe({
+      next: (response: LiveSessionResponse) => {
+        this.isCreatingSession = false;
+        
         if (response.success && response.session_id) {
-          this.currentSession = {
+          const session: LiveSession = {
             session_id: response.session_id,
             created_at: new Date(),
-            is_active: false
+            is_active: false,
+            owner_id: response.owner_id
           };
           
-          // Join the session
-          this.liveTranscriptionService.joinSession(response.session_id);
+          this.currentSession = session;
           
-          // Reset sharing state
-          this.isShared = false;
-          this.shareUrl = '';
+          // Update owner ID if it was generated server-side
+          if (response.owner_id && response.owner_id !== this.ownerId) {
+            this.ownerId = response.owner_id;
+            localStorage.setItem('live-transcription-owner-id', this.ownerId);
+          }
           
-          // Check sharing status after a brief delay to ensure session is fully created
-          setTimeout(() => this.checkSharingStatus(), 1000);
+          // Clear any resumable session state
+          this.clearResumableSession();
           
-          this.showSuccess('Session created successfully!');
-          console.log('Session created:', response.session_id);
+          this.showSuccess(`Session created: ${response.session_id.substring(0, 8)}...`);
+          
+          // Join the session as owner
+          this.liveTranscriptionService.joinSession(response.session_id, this.ownerId || undefined);
+          
+          console.log('Session created successfully:', session);
+          console.log('Button states after creation:', {
+            canCreateSession: this.canCreateSession(),
+            canStartRecording: this.canStartRecording(),
+            isCreatingSession: this.isCreatingSession
+          });
         } else {
           this.showError(response.error || 'Failed to create session');
         }
-        this.isCreatingSession = false;
       },
       error: (error) => {
-        console.error('Error creating session:', error);
-        this.showError('Failed to create session');
         this.isCreatingSession = false;
+        console.error('Error creating session:', error);
+        
+        // Check if it's an authentication error
+        if (error.status === 401) {
+          this.showAuthDialog('Create Session', 'Admin authentication is required to create new sessions.').then(authenticated => {
+            if (authenticated) {
+              // Retry the operation after successful authentication
+              this.createSession();
+            }
+          });
+        } else {
+          this.showError('Failed to create session: ' + (error.error?.error || error.message));
+        }
       }
     });
   }
@@ -540,7 +651,15 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           console.error('Error disabling sharing:', error);
-          this.showError('Failed to disable sharing');
+          if (error.status === 401) {
+            this.showAuthDialog('Disable Sharing', 'Admin authentication is required to disable sharing.').then(authenticated => {
+              if (authenticated) {
+                this.toggleSharing();
+              }
+            });
+          } else {
+            this.showError('Failed to disable sharing');
+          }
         }
       });
     } else {
@@ -558,7 +677,15 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
         },
         error: (error) => {
           console.error('Error enabling sharing:', error);
-          this.showError('Failed to enable sharing');
+          if (error.status === 401) {
+            this.showAuthDialog('Enable Sharing', 'Admin authentication is required to enable sharing.').then(authenticated => {
+              if (authenticated) {
+                this.toggleSharing();
+              }
+            });
+          } else {
+            this.showError('Failed to enable sharing');
+          }
         }
       });
     }
@@ -674,7 +801,15 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         console.error('Start session error:', error);
-        this.showError('Failed to start session');
+        if (error.status === 401) {
+          this.showAuthDialog('Start Recording', 'Admin authentication is required to start recording.').then(authenticated => {
+            if (authenticated) {
+              this.startRecordingWithSources(micDeviceId, includeSystemAudio, useMicrophone);
+            }
+          });
+        } else {
+          this.showError('Failed to start session');
+        }
       }
     });
   }
@@ -1296,16 +1431,19 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
 
   // Helper methods for button states
   canCreateSession(): boolean {
-    const result = this.isConnected && !this.isCreatingSession && !this.currentSession && !this.isProcessingSummary;
-    if (!result) {
-      console.log('canCreateSession false because:', {
-        isConnected: this.isConnected,
-        isCreatingSession: this.isCreatingSession,
-        currentSession: this.currentSession,
-        isProcessingSummary: this.isProcessingSummary
-      });
-    }
-    return result;
+    console.log('canCreateSession check:', {
+      isConnected: this.isConnected,
+      isCreatingSession: this.isCreatingSession,
+      currentSession: this.currentSession,
+      isProcessingSummary: this.isProcessingSummary,
+      hasResumableSession: this.hasResumableSession
+    });
+    
+    return this.isConnected && 
+           !this.isCreatingSession && 
+           !this.currentSession && 
+           !this.isProcessingSummary &&
+           !this.hasResumableSession; // Don't allow creating new session if resumable one exists
   }
 
   canStartRecording(): boolean {
@@ -1353,6 +1491,16 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
     });
   }
 
+  private showAuthDialog(title: string, message: string): Promise<boolean> {
+    const dialogRef = this.dialog.open(AuthDialogComponent, {
+      width: '400px',
+      panelClass: 'dark-dialog',
+      data: { title, message }
+    });
+
+    return dialogRef.afterClosed().toPromise().then((result: boolean) => result || false);
+  }
+
   trackByLine(index: number, line: string): number {
     return index;
   }
@@ -1367,39 +1515,39 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
   }
 
   stopSession(): void {
-    if (!this.currentSession) {
-      this.showError('No active session');
+    if (!this.currentSession || !this.isRecording) {
       return;
     }
 
-    if (!this.isRecording) {
-      this.showError('No recording in progress');
-      return;
-    }
-
-    console.log('=== STOP SESSION DEBUG ===');
-    console.log('Session ID:', this.currentSession.session_id);
-    console.log('Current transcript lines:', this.transcriptLines.length);
-
+    console.log('Stopping session:', this.currentSession.session_id);
     this.isRecording = false;
-    this.isPaused = true;
+    
+    // Stop audio capture first
     this.stopAudioCapture();
-
+    
+    // Stop the session on server
     this.liveTranscriptionService.stopSession(this.currentSession.session_id).subscribe({
       next: (response) => {
-        console.log('Stop session response:', response);
         if (response.success) {
-          this.showSuccess('Recording paused. You can start recording again to continue.');
-          
-          // Request current transcript to ensure we have the latest
-          console.log('Requesting current transcript after stop...');
-          setTimeout(() => {
-            this.liveTranscriptionService.requestCurrentTranscript(this.currentSession!.session_id);
-          }, 500);
+          this.currentSession!.is_active = false;
+          this.isPaused = true; // Mark as paused so user can resume later
+          this.showSuccess('Recording stopped');
+          console.log('Session stopped successfully');
+        } else {
+          this.showError(response.error || 'Failed to stop session');
         }
       },
       error: (error) => {
         console.error('Error stopping session:', error);
+        if (error.status === 401) {
+          this.showAuthDialog('Stop Recording', 'Admin authentication is required to stop recording.').then(authenticated => {
+            if (authenticated) {
+              this.stopSession();
+            }
+          });
+        } else {
+          this.showError('Failed to stop session');
+        }
       }
     });
   }
@@ -1440,8 +1588,8 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
   }
 
   private async generateSessionSummary(): Promise<void> {
-    if (this.accumulatedAudioChunks.length === 0 && this.accumulatedRawBuffer.length === 0) {
-      this.showError('No audio recorded to analyze');
+    if (!this.currentSession || !this.ownerId) {
+      this.showError('No session or owner information available');
       this.finalizeEndSession();
       return;
     }
@@ -1449,20 +1597,185 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
     this.isProcessingSummary = true;
     this.showInfo('Processing session audio for analysis...');
 
+    console.log('Generating summary for session:', this.currentSession.session_id);
+
+    try {
+      // First, try to get the complete session audio (including persisted data)
+      this.liveTranscriptionService.getSessionAudioForSummary(this.currentSession.session_id, this.ownerId).subscribe({
+        next: (audioResponse) => {
+          console.log('Audio summary response:', audioResponse);
+          
+          if (audioResponse.success && audioResponse.audio_file_path) {
+            // Use server-side complete audio file
+            console.log(`Using server-side audio file: ${audioResponse.audio_file_path} (${audioResponse.duration_seconds}s)`);
+            this.processServerAudioFile(audioResponse.audio_file_path, audioResponse.duration_seconds || 0);
+          } else {
+            // Fallback to client-side accumulated audio
+            console.log('No server-side audio available, using client-side accumulated audio');
+            console.log('Accumulated raw buffer chunks:', this.accumulatedRawBuffer.length);
+            console.log('Accumulated media recorder chunks:', this.accumulatedAudioChunks.length);
+            this.processClientSideAudio();
+          }
+        },
+        error: (error) => {
+          console.error('Error getting server audio:', error);
+          // Fallback to client-side accumulated audio
+          this.processClientSideAudio();
+        }
+      });
+
+    } catch (error) {
+      this.isProcessingSummary = false;
+      this.showError('Failed to prepare audio for analysis');
+      this.finalizeEndSession();
+    }
+  }
+
+  private processServerAudioFile(audioFilePath: string, duration: number): void {
+    // Download the audio file from the server
+    this.showInfo(`Downloading ${duration.toFixed(1)}s of complete session audio...`);
+    
+    // Create URL for downloading the audio file
+    const audioUrl = `http://localhost:5000/api/sessions/${this.currentSession!.session_id}/audio-file?owner_id=${this.ownerId}`;
+    
+    // Download the audio file
+    fetch(audioUrl)
+      .then(response => {
+        if (!response.ok) {
+          throw new Error('Failed to download audio file');
+        }
+        return response.blob();
+      })
+      .then(blob => {
+        // Create a File object from the blob
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const finalAudioFile = new File([blob], `session-${this.currentSession!.session_id}-complete.wav`, { type: 'audio/wav' });
+        
+        console.log(`Downloaded complete audio file: ${finalAudioFile.size} bytes`);
+        
+        // Use the meeting service to transcribe and analyze
+        this.meetingService.transcribeAudio(finalAudioFile).subscribe({
+          next: (response: TranscriptionResponse) => {
+            this.isProcessingSummary = false;
+            this.showSuccess('Session analysis completed!');
+            
+            // Save the summary to the session
+            if (this.currentSession && this.ownerId && response.summary) {
+              // Save complete meeting analysis
+              const analysisData = {
+                transcript: response.transcript,
+                chapters: response.chapters,
+                takeaways: response.takeaways,
+                summary: response.summary,
+                notes: response.notes,
+                filename: finalAudioFile.name,
+                originalTranscript: this.fullTranscript,
+                session_id: this.currentSession.session_id
+              };
+              
+              this.liveTranscriptionService.saveMeetingAnalysis(
+                this.currentSession.session_id,
+                analysisData,
+                this.ownerId
+              ).subscribe({
+                next: (saveResponse) => {
+                  if (saveResponse.success) {
+                    console.log('Meeting analysis saved successfully');
+                    
+                    // Enable sharing so the session can be viewed in the transcript list
+                    if (!this.isShared) {
+                      this.liveTranscriptionService.enableSharing(this.currentSession!.session_id).subscribe({
+                        next: (shareResponse) => {
+                          if (shareResponse.success) {
+                            console.log('Session sharing enabled for transcript list');
+                            this.isShared = true;
+                          }
+                        },
+                        error: (error) => {
+                          console.error('Error enabling sharing:', error);
+                        }
+                      });
+                    }
+                  } else {
+                    console.error('Failed to save meeting analysis:', saveResponse.error);
+                  }
+                },
+                error: (error) => {
+                  console.error('Error saving meeting analysis:', error);
+                }
+              });
+            }
+            
+            // Store the analysis results in session storage for the meeting analyzer
+            sessionStorage.setItem('live-session-analysis', JSON.stringify({
+              sessionId: this.currentSession!.session_id,
+              transcript: response.transcript,
+              chapters: response.chapters,
+              takeaways: response.takeaways,
+              summary: response.summary,
+              notes: response.notes,
+              filename: finalAudioFile.name,
+              originalTranscript: this.fullTranscript
+            }));
+            
+            // Show success message then navigate after a brief delay
+            this.showSuccess('Analysis complete! Switching to Meeting Analyzer...');
+            setTimeout(() => {
+              this.finalizeEndSession();
+              this.switchToMeetingAnalyzer.emit();
+            }, 1500);
+          },
+          error: (error) => {
+            this.isProcessingSummary = false;
+            if (error.status === 401) {
+              this.showAuthDialog('Meeting Analysis', 'Admin authentication is required to analyze the meeting.').then(authenticated => {
+                if (authenticated) {
+                  // Retry the entire summary generation process
+                  this.generateSessionSummary();
+                } else {
+                  this.finalizeEndSession();
+                }
+              });
+            } else {
+              this.showError('Failed to analyze session audio: ' + (error.error?.error || error.message));
+              this.finalizeEndSession();
+            }
+          }
+        });
+      })
+      .catch(error => {
+        console.error('Error downloading audio file:', error);
+        this.showError('Failed to download complete audio. Falling back to current session audio...');
+        // Fall back to client-side audio
+        this.processClientSideAudio();
+      });
+  }
+
+  private processClientSideAudio(): void {
+    if (this.accumulatedAudioChunks.length === 0 && this.accumulatedRawBuffer.length === 0) {
+      this.showError('No audio recorded to analyze');
+      this.finalizeEndSession();
+      return;
+    }
+
     try {
       // Create a combined audio file from all accumulated chunks
       let finalAudioFile: File;
 
-      if (this.accumulatedAudioChunks.length > 0) {
-        // Use MediaRecorder chunks
-        const combinedBlob = new Blob(this.accumulatedAudioChunks, { type: 'audio/webm' });
-        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-        finalAudioFile = new File([combinedBlob], `live-session-${timestamp}.webm`, { type: 'audio/webm' });
-      } else if (this.accumulatedRawBuffer.length > 0) {
-        // Use raw audio buffer
+      // Prioritize raw buffer as it contains mixed audio (microphone + system)
+      // MediaRecorder chunks only contain microphone audio
+      if (this.accumulatedRawBuffer.length > 0) {
+        // Use raw audio buffer (contains mixed audio: microphone + system)
+        console.log('Using raw audio buffer for summary (contains mixed audio)');
         const wavBlob = this.createWavBlobFromRawBuffer(this.accumulatedRawBuffer);
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
         finalAudioFile = new File([wavBlob], `live-session-${timestamp}.wav`, { type: 'audio/wav' });
+      } else if (this.accumulatedAudioChunks.length > 0) {
+        // Fallback to MediaRecorder chunks (microphone only)
+        console.log('Using MediaRecorder chunks for summary (microphone only)');
+        const combinedBlob = new Blob(this.accumulatedAudioChunks, { type: 'audio/webm' });
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        finalAudioFile = new File([combinedBlob], `live-session-${timestamp}.webm`, { type: 'audio/webm' });
       } else {
         throw new Error('No audio data available');
       }
@@ -1473,9 +1786,56 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
           this.isProcessingSummary = false;
           this.showSuccess('Session analysis completed!');
           
+          // Save the summary to the session
+          if (this.currentSession && this.ownerId && response.summary) {
+            // Save complete meeting analysis
+            const analysisData = {
+              transcript: response.transcript,
+              chapters: response.chapters,
+              takeaways: response.takeaways,
+              summary: response.summary,
+              notes: response.notes,
+              filename: finalAudioFile.name,
+              originalTranscript: this.fullTranscript,
+              session_id: this.currentSession.session_id
+            };
+            
+            this.liveTranscriptionService.saveMeetingAnalysis(
+              this.currentSession.session_id,
+              analysisData,
+              this.ownerId
+            ).subscribe({
+              next: (saveResponse) => {
+                if (saveResponse.success) {
+                  console.log('Meeting analysis saved successfully');
+                  
+                  // Enable sharing so the session can be viewed in the transcript list
+                  if (!this.isShared) {
+                    this.liveTranscriptionService.enableSharing(this.currentSession!.session_id).subscribe({
+                      next: (shareResponse) => {
+                        if (shareResponse.success) {
+                          console.log('Session sharing enabled for transcript list');
+                          this.isShared = true;
+                        }
+                      },
+                      error: (error) => {
+                        console.error('Error enabling sharing:', error);
+                      }
+                    });
+                  }
+                } else {
+                  console.error('Failed to save meeting analysis:', saveResponse.error);
+                }
+              },
+              error: (error) => {
+                console.error('Error saving meeting analysis:', error);
+              }
+            });
+          }
+          
           // Store the analysis results in session storage for the meeting analyzer
           sessionStorage.setItem('live-session-analysis', JSON.stringify({
-            sessionId: response.session_id,
+            sessionId: this.currentSession!.session_id,
             transcript: response.transcript,
             chapters: response.chapters,
             takeaways: response.takeaways,
@@ -1540,7 +1900,13 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
       next: (response) => {
         console.log('Delete session response:', response);
         if (response.success) {
-          this.liveTranscriptionService.leaveSession(this.currentSession!.session_id);
+          // Leave session as owner
+          if (this.ownerId) {
+            this.liveTranscriptionService.leaveSession(this.currentSession!.session_id, this.ownerId);
+          } else {
+            this.liveTranscriptionService.leaveSession(this.currentSession!.session_id);
+          }
+          
           this.resetSession();
           this.showSuccess('Session ended successfully');
           this.sessionEnded.emit();
@@ -1561,13 +1927,21 @@ export class LiveTranscriptionComponent implements OnInit, OnDestroy {
       },
       error: (error) => {
         console.error('Error ending session:', error);
-        this.showError('Failed to end session');
-        this.resetSession(); // Reset anyway
-        
-        // Force a connection check even on error
-        setTimeout(() => {
-          this.checkHealth();
-        }, 500);
+        if (error.status === 401) {
+          this.showAuthDialog('End Session', 'Admin authentication is required to end the session.').then(authenticated => {
+            if (authenticated) {
+              this.finalizeEndSession();
+            }
+          });
+        } else {
+          this.showError('Failed to end session');
+          this.resetSession(); // Reset anyway
+          
+          // Force a connection check even on error
+          setTimeout(() => {
+            this.checkHealth();
+          }, 500);
+        }
       }
     });
   }
@@ -1696,5 +2070,120 @@ This will enable full system audio capture functionality.`,
       }
       throw err;
     }
+  }
+
+  private showReconnectionPrompt(): void {
+    if (!this.resumableSessionState) return;
+    
+    // Prevent showing multiple dialogs
+    if (this.isReconnectionDialogOpen) {
+      console.log('Reconnection dialog already open, skipping...');
+      return;
+    }
+    
+    this.isReconnectionDialogOpen = true;
+
+    const dialogData = {
+      title: 'Resume Previous Session?',
+      message: `We found a previous session that was interrupted. Would you like to continue where you left off?`,
+      subMessage: `Session created: ${new Date(this.resumableSessionState.created_at).toLocaleString()}\nResume count: ${this.resumableSessionState.resume_count}\nTranscript length: ${this.resumableSessionState.transcript.length} characters`,
+      confirmText: 'Resume Session',
+      cancelText: 'Start New Session'
+    };
+
+    const dialogRef = this.dialog.open(ConfirmationDialogComponent, {
+      width: '450px',
+      data: dialogData,
+      disableClose: true // Prevent closing by clicking outside
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      this.isReconnectionDialogOpen = false; // Reset flag when dialog closes
+      
+      if (result) {
+        this.resumeSession();
+      } else {
+        this.clearResumableSession();
+      }
+    });
+  }
+
+  private handleSessionResumed(data: {session_id: string, owner_id: string, session_state: SessionState}): void {
+    console.log('Handling session resumed:', data);
+    
+    this.currentSession = {
+      session_id: data.session_id,
+      created_at: new Date(data.session_state.created_at),
+      is_active: data.session_state.is_active,
+      is_shared: data.session_state.is_shared,
+      title: data.session_state.title,
+      owner_id: data.owner_id
+    };
+
+    // Restore transcript if available
+    if (data.session_state.transcript) {
+      this.restoreTranscriptFromState(data.session_state.transcript);
+    }
+
+    this.isResumingSession = false;
+    this.clearResumableSession();
+    this.showSuccess(`Session ${data.session_id.substring(0, 8)}... resumed successfully!`);
+    
+    // Check sharing status
+    this.checkSharingStatus();
+  }
+
+  clearResumableSession(): void {
+    this.hasResumableSession = false;
+    this.resumableSessionId = null;
+    this.resumableSessionState = null;
+    this.isReconnectionDialogOpen = false; // Reset dialog flag
+  }
+
+  resumeSession(): void {
+    if (!this.resumableSessionId || !this.ownerId) {
+      this.showError('Cannot resume session: missing session or owner information');
+      return;
+    }
+
+    this.isResumingSession = true;
+
+    this.liveTranscriptionService.resumeSession(this.resumableSessionId, this.ownerId).subscribe({
+      next: (response) => {
+        if (response.success && response.session_state) {
+          // Join the session as owner
+          this.liveTranscriptionService.joinSessionAsOwner(this.resumableSessionId!, this.ownerId!);
+          
+          // The actual session resumption will be handled by the session_resumed event
+          console.log('Resume session API call successful');
+        } else {
+          this.isResumingSession = false;
+          this.showError(response.error || 'Failed to resume session');
+          this.clearResumableSession();
+        }
+      },
+      error: (error) => {
+        this.isResumingSession = false;
+        console.error('Error resuming session:', error);
+        this.showError('Failed to resume session: ' + (error.error?.error || error.message));
+        this.clearResumableSession();
+      }
+    });
+  }
+
+  private restoreTranscriptFromState(transcript: string): void {
+    if (!transcript) return;
+
+    // Parse the transcript string back into lines
+    const lines = transcript.split('\n').filter(line => line.trim());
+    this.transcriptLines = lines;
+    this.fullTranscript = transcript;
+    
+    console.log(`Restored ${lines.length} transcript lines from session state`);
+    
+    // Scroll to bottom after a short delay
+    setTimeout(() => {
+      this.scrollToBottom();
+    }, 100);
   }
 } 

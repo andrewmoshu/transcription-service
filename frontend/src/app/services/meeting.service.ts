@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 import { Observable } from 'rxjs';
+import { AuthService } from './auth.service';
 
 export interface Chapter {
   title: string;
@@ -45,11 +46,20 @@ export interface SearchResponse {
 export class MeetingService {
   private apiUrl = 'http://localhost:5000/api';
 
-  constructor(private http: HttpClient) { }
+  constructor(
+    private http: HttpClient,
+    private authService: AuthService
+  ) { }
 
   transcribeAudio(file: File): Observable<TranscriptionResponse> {
     const formData = new FormData();
     formData.append('audio', file);
+    
+    // Add password to the form data if available
+    const password = this.authService.getAdminPassword();
+    if (password) {
+      formData.append('password', password);
+    }
 
     return this.http.post<TranscriptionResponse>(
       `${this.apiUrl}/transcribe`,

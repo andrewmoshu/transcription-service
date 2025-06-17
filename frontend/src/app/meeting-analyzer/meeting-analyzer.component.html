@@ -269,7 +269,8 @@
                 mat-icon-button 
                 matSuffix 
                 (click)="sendMessage()"
-                [disabled]="!newMessage.trim() || isSendingMessage"
+                [disabled]="!newMessage.trim() || isSendingMessage || !sessionId"
+                [matTooltip]="!sessionId ? 'Chat unavailable - session not loaded properly' : ''"
               >
                 <mat-icon>send</mat-icon>
               </button>

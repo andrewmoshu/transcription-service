@@ -13,8 +13,11 @@ import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { MatMenuModule } from '@angular/material/menu';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MeetingService, Chapter, TranscriptionResponse } from '../services/meeting.service';
+import { AuthService } from '../services/auth.service';
+import { AuthDialogComponent } from '../auth-dialog/auth-dialog.component';
 import { marked } from 'marked';
 
 interface ChatMessage {
@@ -40,7 +43,8 @@ interface ChatMessage {
     MatSnackBarModule,
     MatMenuModule,
     MatChipsModule,
-    MatTooltipModule
+    MatTooltipModule,
+    MatDialogModule
   ],
   templateUrl: './meeting-analyzer.component.html',
   styleUrls: ['./meeting-analyzer.component.css']
@@ -88,8 +92,10 @@ export class MeetingAnalyzerComponent implements OnInit {
 
   constructor(
     private meetingService: MeetingService,
+    private authService: AuthService,
     private snackBar: MatSnackBar,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private dialog: MatDialog
   ) {
     // Configure marked options
     marked.setOptions({
@@ -121,6 +127,13 @@ export class MeetingAnalyzerComponent implements OnInit {
         
         // Load the analysis data
         this.sessionId = analysisData.sessionId;
+        
+        // Check if sessionId is missing
+        if (!this.sessionId) {
+          console.error('Session ID is missing from analysis data');
+          this.showError('Session not loaded properly. Chat functionality may be unavailable.');
+        }
+        
         this.transcript = analysisData.transcript;
         this.chapters = analysisData.chapters;
         this.filteredChapters = analysisData.chapters;
@@ -138,13 +151,19 @@ export class MeetingAnalyzerComponent implements OnInit {
         sessionStorage.removeItem('live-session-analysis');
         
         // Show success message and switch to transcript tab
-        this.showSuccess('Live session analysis loaded successfully!');
+        if (this.sessionId) {
+          this.showSuccess('Live session analysis loaded successfully!');
+        } else {
+          this.showSuccess('Analysis loaded, but chat is unavailable due to missing session ID');
+        }
         this.selectedTabIndex = 0;
         
         // Add note about original live transcript if available
         if (analysisData.originalTranscript) {
           this.showInfo('This analysis was generated from a live transcription session. The transcript has been enhanced for analysis.');
         }
+        
+        console.log('Loaded session analysis with ID:', this.sessionId);
         
       } catch (error) {
         console.error('Error loading live session analysis:', error);
@@ -234,7 +253,15 @@ export class MeetingAnalyzerComponent implements OnInit {
       },
       error: (error) => {
         this.isProcessing = false;
-        this.showError(error.error?.error || 'Failed to process audio file');
+        if (error.status === 401) {
+          this.showAuthDialog('Process Audio', 'Admin authentication is required to analyze audio files.').then(authenticated => {
+            if (authenticated) {
+              this.processAudio();
+            }
+          });
+        } else {
+          this.showError(error.error?.error || 'Failed to process audio file');
+        }
       }
     });
   }
@@ -294,7 +321,12 @@ export class MeetingAnalyzerComponent implements OnInit {
   }
 
   sendMessage(): void {
+    console.log('sendMessage called - sessionId:', this.sessionId, 'message:', this.newMessage);
+    
     if (!this.newMessage.trim() || !this.sessionId || this.isSendingMessage) {
+      if (!this.sessionId) {
+        this.showError('Cannot send message - session not loaded properly');
+      }
       return;
     }
 
@@ -309,8 +341,10 @@ export class MeetingAnalyzerComponent implements OnInit {
     this.newMessage = '';
     this.isSendingMessage = true;
 
+    console.log('Sending chat message to session:', this.sessionId);
     this.meetingService.sendChatMessage(this.sessionId, question).subscribe({
       next: (response) => {
+        console.log('Chat response received:', response);
         const assistantMessage: ChatMessage = {
           role: 'assistant',
           content: response.response,
@@ -329,7 +363,10 @@ export class MeetingAnalyzerComponent implements OnInit {
       },
       error: (error) => {
         this.isSendingMessage = false;
-        this.showError('Failed to send message');
+        // Show specific error message from backend if available
+        const errorMessage = error.error?.error || 'Failed to send message. Please ensure the transcript is loaded properly.';
+        this.showError(errorMessage);
+        console.error('Chat error:', error);
       }
     });
   }
@@ -439,6 +476,16 @@ export class MeetingAnalyzerComponent implements OnInit {
       duration: 3000,
       panelClass: ['info-snackbar']
     });
+  }
+
+  private showAuthDialog(title: string, message: string): Promise<boolean> {
+    const dialogRef = this.dialog.open(AuthDialogComponent, {
+      width: '400px',
+      panelClass: 'dark-dialog',
+      data: { title, message }
+    });
+
+    return dialogRef.afterClosed().toPromise().then((result: boolean) => result || false);
   }
 
   getFileSize(file: File): string {

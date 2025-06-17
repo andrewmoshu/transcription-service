@@ -16,7 +16,8 @@ import {
   LiveTranscriptionService, 
   SharedSessionInfo, 
   TranscriptUpdate,
-  SessionStatusUpdate
+  SessionStatusUpdate,
+  SummaryInfo
 } from '../services/live-transcription.service';
 
 @Component({
@@ -45,6 +46,8 @@ export class SharedSessionViewerComponent implements OnInit, OnDestroy {
   fullTranscript = '';
   isConnected = false;
   isLoading = true;
+  sessionSummary: SummaryInfo | null = null;
+  activeTab = 0; // 0 for transcript, 1 for summary
   
   private subscriptions: Subscription[] = [];
 
@@ -95,6 +98,9 @@ export class SharedSessionViewerComponent implements OnInit, OnDestroy {
             
             // Load current transcript
             this.loadCurrentTranscript();
+            
+            // Load summary if available
+            this.loadSessionSummary();
           } else {
             this.showError('Session not found or not shared');
             this.router.navigate(['/']);
@@ -317,5 +323,24 @@ export class SharedSessionViewerComponent implements OnInit, OnDestroy {
       duration: 5000,
       panelClass: ['error-snackbar']
     });
+  }
+
+  private loadSessionSummary(): void {
+    this.subscriptions.push(
+      this.liveTranscriptionService.getSharedSessionSummary(this.sessionId).subscribe({
+        next: (response) => {
+          if (response.success && response.summary) {
+            this.sessionSummary = {
+              summary: response.summary,
+              generated_at: response.generated_at
+            };
+          }
+        },
+        error: (error: any) => {
+          console.error('Error loading session summary:', error);
+          // Don't show error - summary might not be available yet
+        }
+      })
+    );
   }
 } 

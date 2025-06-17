@@ -2,10 +2,51 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Frontend</title>
+  <title>Meeting Transcriber</title>
   <base href="/">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <!-- Enhanced mobile viewport settings -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover">
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Mobile-specific meta tags -->
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Meeting Transcriber">
+  <meta name="theme-color" content="#0a0a0a">
+  <meta name="msapplication-TileColor" content="#0a0a0a">
+  <meta name="msapplication-config" content="browserconfig.xml">
+  
+  <!-- SEO and description -->
+  <meta name="description" content="Real-time meeting transcription and analysis powered by AI. Live speech-to-text, meeting summaries, and interactive chat.">
+  <meta name="keywords" content="transcription, meeting, speech-to-text, AI, voice recognition, meeting analysis">
+  <meta name="author" content="Meeting Transcriber">
+  
+  <!-- Touch icons for mobile -->
+  <meta name="apple-touch-icon" content="assets/icons/icon-192x192.png">
+  <meta name="apple-touch-icon-precomposed" content="assets/icons/icon-192x192.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="assets/icons/icon-192x192.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="assets/icons/icon-32x32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="assets/icons/icon-16x16.png">
+  
+  <!-- Prevent phone number detection -->
+  <meta name="format-detection" content="telephone=no">
+  
+  <!-- Microsoft specific -->
+  <meta name="msapplication-TileImage" content="assets/icons/icon-144x144.png">
+  <meta name="msapplication-square70x70logo" content="assets/icons/icon-72x72.png">
+  <meta name="msapplication-square150x150logo" content="assets/icons/icon-144x144.png">
+  <meta name="msapplication-wide310x150logo" content="assets/icons/icon-384x384.png">
+  <meta name="msapplication-square310x310logo" content="assets/icons/icon-384x384.png">
+  
   <link rel="icon" type="image/x-icon" href="favicon.ico">
+  
+  <!-- Preload critical fonts for better mobile performance -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 </head>
 <body>
   <app-root></app-root>

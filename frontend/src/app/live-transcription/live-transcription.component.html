@@ -23,6 +23,11 @@
           <mat-chip *ngIf="currentSession" class="active">
             <mat-icon>session_info</mat-icon>
             Session: {{currentSession.session_id.substring(0, 8)}}...
+            <span *ngIf="currentSession.owner_id && ownerId === currentSession.owner_id" class="owner-indicator">(Owner)</span>
+          </mat-chip>
+          <mat-chip *ngIf="hasResumableSession && !currentSession" class="warning">
+            <mat-icon>restore</mat-icon>
+            Previous Session Available
           </mat-chip>
           <mat-chip *ngIf="hasAccumulatedAudio()" class="accent">
             <mat-icon>audio_file</mat-icon>
@@ -39,6 +44,40 @@
         </mat-chip-set>
       </div>
 
+      <!-- Reconnection Notice -->
+      <div *ngIf="hasResumableSession && !currentSession" class="reconnection-notice">
+        <mat-card class="notice-card">
+          <div class="notice-content">
+            <mat-icon class="notice-icon">restore</mat-icon>
+            <div class="notice-text">
+              <h4>Previous Session Found</h4>
+              <p>We found a previous session that was interrupted. You can resume where you left off or start a new session.</p>
+              <div class="session-info" *ngIf="resumableSessionState">
+                <small>Created: {{resumableSessionState.created_at | date:'short'}}</small>
+                <small *ngIf="resumableSessionState.resume_count > 0">• Resumed {{resumableSessionState.resume_count}} time(s)</small>
+                <small *ngIf="resumableSessionState.transcript">• {{resumableSessionState.transcript.length}} characters</small>
+              </div>
+            </div>
+            <div class="notice-actions">
+              <button 
+                mat-stroked-button 
+                color="primary"
+                (click)="resumeSession()"
+                [disabled]="isResumingSession">
+                <mat-icon>restore</mat-icon>
+                {{isResumingSession ? 'Resuming...' : 'Resume Session'}}
+                <mat-progress-spinner *ngIf="isResumingSession" diameter="16" mode="indeterminate" style="margin-left: 8px; display: inline-block;"></mat-progress-spinner>
+              </button>
+              <button 
+                mat-button 
+                (click)="clearResumableSession()">
+                Start New Session
+              </button>
+            </div>
+          </div>
+        </mat-card>
+      </div>
+
       <mat-divider></mat-divider>
 
       <!-- Control Panel -->
@@ -47,10 +86,11 @@
           <button 
             mat-flat-button
             (click)="createSession()"
-            [disabled]="!canCreateSession()"
+            [disabled]="!canCreateSession() || hasResumableSession"
             class="control-button primary">
             <mat-icon>add</mat-icon>
             {{isCreatingSession ? 'Creating...' : 'New Session'}}
+            <mat-progress-spinner *ngIf="isCreatingSession" diameter="16" mode="indeterminate" style="margin-left: 8px; display: inline-block;"></mat-progress-spinner>
           </button>
 
           <button 

@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_socketio import SocketIO, emit, join_room, leave_room
 import threading
@@ -10,6 +10,7 @@ from dotenv import load_dotenv
 import google.generativeai as genai
 from werkzeug.utils import secure_filename
 from langchain.memory import ConversationBufferMemory
+from functools import wraps
 
 # Import project modules
 from live_transcription import LiveTranscriptionManager
@@ -26,6 +27,45 @@ load_dotenv()
 
 # Configure Gemini
 genai.configure(api_key=os.environ.get("GOOGLE_API_KEY"))
+
+# Get admin password from environment
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")  # Default for development
+
+# Authentication decorator
+def require_admin_auth(f):
+    """Decorator to require admin password for certain endpoints"""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        # Check for password in different places
+        password = None
+        
+        # Check in JSON body
+        if request.is_json:
+            data = request.get_json() or {}
+            password = data.get('password')
+        
+        # Check in form data
+        if not password and request.form:
+            password = request.form.get('password')
+        
+        # Check in headers
+        if not password:
+            password = request.headers.get('X-Admin-Password')
+        
+        # Check in query params (not recommended for production)
+        if not password:
+            password = request.args.get('password')
+        
+        # Validate password
+        if not password or password != ADMIN_PASSWORD:
+            return jsonify({
+                'success': False,
+                'error': 'Admin authentication required',
+                'message': 'Please provide a valid admin password'
+            }), 401
+        
+        return f(*args, **kwargs)
+    return decorated_function
 
 # Create Flask app with SocketIO
 app = Flask(__name__)
@@ -201,15 +241,46 @@ def health_check():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
+@app.route('/api/auth/check', methods=['POST'])
+def check_auth():
+    """Check if provided password is valid"""
+    try:
+        data = request.get_json() or {}
+        password = data.get('password')
+        
+        if password and password == ADMIN_PASSWORD:
+            return jsonify({
+                'success': True,
+                'authenticated': True,
+                'message': 'Authentication successful'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'authenticated': False,
+                'message': 'Invalid password'
+            }), 401
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # Live Transcription API Endpoints
 @app.route('/api/sessions', methods=['POST'])
+@require_admin_auth
 def create_session():
-    """Create a new live transcription session"""
+    """Create a new transcription session (requires admin authentication)"""
     try:
-        session_id = transcription_manager.create_session()
+        # Get owner_id from request if provided
+        data = request.get_json() or {}
+        owner_id = data.get('owner_id')
+        
+        session_id, owner_id = transcription_manager.create_session(owner_id)
         return jsonify({
             'success': True,
             'session_id': session_id,
+            'owner_id': owner_id,
             'message': 'Session created successfully'
         }), 200
     except Exception as e:
@@ -218,9 +289,184 @@ def create_session():
             'error': str(e)
         }), 500
 
+@app.route('/api/sessions/owner/<owner_id>', methods=['GET'])
+def get_owner_sessions(owner_id):
+    """Get all sessions for a specific owner"""
+    try:
+        sessions = transcription_manager.get_owner_sessions(owner_id)
+        return jsonify({
+            'success': True,
+            'owner_id': owner_id,
+            'sessions': sessions
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/sessions/owner/<owner_id>/resumable', methods=['GET'])
+def find_resumable_session(owner_id):
+    """Find the most recent resumable session for an owner"""
+    try:
+        session_id = transcription_manager.find_resumable_session(owner_id)
+        if session_id:
+            session_state = transcription_manager.get_session_state(session_id, owner_id)
+            return jsonify({
+                'success': True,
+                'owner_id': owner_id,
+                'session_id': session_id,
+                'session_state': session_state
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'No resumable session found'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/sessions/<session_id>/resume', methods=['POST'])
+@require_admin_auth
+def resume_session(session_id):
+    """Resume a session for an owner (requires admin authentication)"""
+    try:
+        data = request.get_json()
+        if not data or 'owner_id' not in data:
+            return jsonify({
+                'success': False,
+                'error': 'owner_id is required'
+            }), 400
+        
+        owner_id = data['owner_id']
+        success = transcription_manager.resume_session(session_id, owner_id)
+        
+        if success:
+            # Get the updated session state
+            session_state = transcription_manager.get_session_state(session_id, owner_id)
+            
+            # Broadcast session resumed to all clients in the session room
+            from datetime import datetime
+            socketio.emit('session_resumed', {
+                'session_id': session_id,
+                'owner_id': owner_id,
+                'resumed_at': datetime.now().isoformat(),
+                'session_state': session_state
+            }, room=f"session_{session_id}")
+            
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'owner_id': owner_id,
+                'session_state': session_state,
+                'message': 'Session resumed successfully'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to resume session. Session may not exist, be owned by another user, or be too old.'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/sessions/<session_id>/state', methods=['GET'])
+def get_session_state(session_id):
+    """Get session state with optional owner verification"""
+    try:
+        owner_id = request.args.get('owner_id')
+        session_state = transcription_manager.get_session_state(session_id, owner_id)
+        
+        if session_state:
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'session_state': session_state
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Session not found or access denied'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/sessions/<session_id>/audio-summary', methods=['GET'])
+def get_session_audio_for_summary(session_id):
+    """Get complete audio data for summary generation (with owner verification)"""
+    try:
+        owner_id = request.args.get('owner_id')
+        
+        if not owner_id:
+            return jsonify({
+                'success': False,
+                'error': 'owner_id is required for audio access'
+            }), 400
+        
+        audio_file_path = transcription_manager.get_session_audio_for_summary(session_id, owner_id)
+        
+        if audio_file_path and os.path.exists(audio_file_path):
+            duration = transcription_manager.get_session_audio_duration(session_id, owner_id)
+            
+            print(f"Audio summary for session {session_id}: path={audio_file_path}, duration={duration:.1f}s")
+            
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'audio_file_path': audio_file_path,
+                'duration_seconds': duration,
+                'message': f'Audio file ready for summary generation ({duration:.1f}s)'
+            }), 200
+        else:
+            print(f"No audio file found for session {session_id}")
+            return jsonify({
+                'success': False,
+                'error': 'No audio data available or access denied'
+            }), 404
+    except Exception as e:
+        print(f"Error in get_session_audio_for_summary: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/sessions/<session_id>/audio-duration', methods=['GET'])
+def get_session_audio_duration(session_id):
+    """Get duration of accumulated audio for a session"""
+    try:
+        owner_id = request.args.get('owner_id')
+        duration = transcription_manager.get_session_audio_duration(session_id, owner_id)
+        
+        if duration is not None:
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'duration_seconds': duration,
+                'has_audio': duration > 0
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Session not found or access denied'
+            }), 404
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 @app.route('/api/sessions/<session_id>/share', methods=['POST'])
+@require_admin_auth
 def enable_session_sharing(session_id):
-    """Enable sharing for a session"""
+    """Enable sharing for a session (requires admin authentication)"""
     try:
         success = transcription_manager.enable_sharing(session_id)
         if success:
@@ -253,8 +499,9 @@ def enable_session_sharing(session_id):
         }), 500
 
 @app.route('/api/sessions/<session_id>/share', methods=['DELETE'])
+@require_admin_auth
 def disable_session_sharing(session_id):
-    """Disable sharing for a session"""
+    """Disable sharing for a session (requires admin authentication)"""
     try:
         success = transcription_manager.disable_sharing(session_id)
         if success:
@@ -357,8 +604,9 @@ def get_shared_session_transcript(session_id):
         }), 500
 
 @app.route('/api/sessions/<session_id>', methods=['DELETE'])
+@require_admin_auth
 def delete_session(session_id):
-    """Delete a transcription session"""
+    """Delete a transcription session (requires admin authentication)"""
     try:
         # Get session info before deletion for broadcasting
         share_info = transcription_manager.get_share_info(session_id)
@@ -413,8 +661,9 @@ def get_session_transcript(session_id):
         }), 500
 
 @app.route('/api/sessions/<session_id>/start', methods=['POST'])
+@require_admin_auth
 def start_session(session_id):
-    """Start a transcription session"""
+    """Start a transcription session (requires admin authentication)"""
     try:
         success = transcription_manager.start_session(session_id)
         if success:
@@ -445,8 +694,9 @@ def start_session(session_id):
         }), 500
 
 @app.route('/api/sessions/<session_id>/stop', methods=['POST'])
+@require_admin_auth
 def stop_session(session_id):
-    """Stop a transcription session"""
+    """Stop a transcription session (requires admin authentication)"""
     try:
         success = transcription_manager.stop_session(session_id)
         if success:
@@ -476,65 +726,126 @@ def stop_session(session_id):
             'error': str(e)
         }), 500
 
-# Meeting Analysis API Endpoints
-@app.route('/api/transcribe', methods=['POST'])
-def transcribe_endpoint():
-    """Endpoint for transcribing audio files"""
+@app.route('/api/sessions/<session_id>/audio-file', methods=['GET'])
+def get_session_audio_file(session_id):
+    """Get the audio file for a session"""
     try:
-        if 'audio' not in request.files:
-            return jsonify({'error': 'No audio file provided'}), 400
+        owner_id = request.args.get('owner_id')
         
-        audio_file = request.files['audio']
-        if audio_file.filename == '':
-            return jsonify({'error': 'No file selected'}), 400
-        
-        # Secure the filename
-        filename = secure_filename(audio_file.filename)
-        
-        # Save uploaded file temporarily
-        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp_file:
-            audio_file.save(tmp_file.name)
-            tmp_file_path = tmp_file.name
-        
-        # Get MIME type
-        mime_type = get_mime_type(filename, audio_file.content_type)
-        
-        # Transcribe
-        transcript = transcribe_audio(tmp_file_path, mime_type)
-        os.remove(tmp_file_path)
-        
-        if transcript and not transcript.startswith("Error:"):
-            # Generate meeting analysis
-            takeaways = generate_meeting_takeaways(transcript)
-            summary = generate_meeting_summary(transcript)
-            notes = generate_meeting_notes(transcript)
-            
-            # Parse chapters
-            chapters = parse_chapter_transcript(transcript)
-            
-            # Create a session ID for this meeting
-            session_id = str(uuid.uuid4())
-            meeting_sessions[session_id] = {
-                'transcript': transcript,
-                'memory': ConversationBufferMemory(memory_key="chat_history", return_messages=True),
-                'chat_history': []
-            }
-            
+        if not owner_id:
             return jsonify({
-                'success': True,
-                'session_id': session_id,
-                'transcript': transcript,
-                'chapters': chapters,
-                'takeaways': takeaways,
-                'summary': summary,
-                'notes': notes,
-                'filename': filename
-            })
+                'success': False,
+                'error': 'owner_id is required for audio access'
+            }), 400
+        
+        # Get the audio file path from transcription manager
+        audio_file_path = transcription_manager.get_session_audio_for_summary(session_id, owner_id)
+        
+        print(f"Audio file request for session {session_id}: path={audio_file_path}")
+        
+        if audio_file_path and os.path.exists(audio_file_path):
+            # Get file info
+            file_size = os.path.getsize(audio_file_path)
+            duration = transcription_manager.get_session_audio_duration(session_id, owner_id)
+            
+            print(f"Serving audio file: {audio_file_path} (size={file_size} bytes, duration={duration:.1f}s)")
+            
+            # Serve the file
+            return send_file(
+                audio_file_path,
+                mimetype='audio/wav',
+                as_attachment=True,
+                download_name=f'session_{session_id}.wav'
+            )
         else:
-            return jsonify({'error': transcript or 'Transcription failed'}), 500
+            print(f"Audio file not found for session {session_id}: {audio_file_path}")
+            return jsonify({
+                'success': False,
+                'error': 'No audio file available or access denied'
+            }), 404
             
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error serving audio file for session {session_id}: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/sessions/<session_id>/summary', methods=['POST'])
+@require_admin_auth
+def save_session_summary(session_id):
+    """Save a summary for a session (requires admin authentication)"""
+    try:
+        data = request.get_json()
+        summary = data.get('summary')
+        owner_id = data.get('owner_id')
+        
+        if not summary:
+            return jsonify({'error': 'Summary is required'}), 400
+        
+        success = transcription_manager.save_session_summary(session_id, summary, owner_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Summary saved successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save summary - session not found or access denied'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/shared/<session_id>/summary', methods=['GET'])
+def get_shared_session_summary(session_id):
+    """Get summary for a shared session (accessible via share link)"""
+    try:
+        summary_info = transcription_manager.get_session_summary(session_id)
+        
+        if summary_info:
+            return jsonify({
+                'success': True,
+                'summary': summary_info['summary'],
+                'generated_at': summary_info['generated_at']
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Session not found, not shared, or no summary available'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/transcripts', methods=['GET'])
+def get_all_transcripts():
+    """Get all available transcripts, optionally filtered by owner"""
+    try:
+        owner_id = request.args.get('owner_id')
+        transcripts = transcription_manager.get_all_transcripts(owner_id)
+        
+        return jsonify({
+            'success': True,
+            'transcripts': transcripts,
+            'total': len(transcripts)
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
 
 @app.route('/api/chat', methods=['POST'])
 def chat_endpoint():
@@ -544,8 +855,22 @@ def chat_endpoint():
         session_id = data.get('session_id')
         question = data.get('question')
         
-        if not session_id or session_id not in meeting_sessions:
-            return jsonify({'error': 'Invalid session ID'}), 400
+        if not session_id:
+            return jsonify({'error': 'Session ID is required'}), 400
+            
+        if session_id not in meeting_sessions:
+            # Try to load from transcription manager if it's a saved session
+            analysis = transcription_manager.get_meeting_analysis(session_id)
+            if analysis and 'transcript' in analysis:
+                # Initialize the session for chat
+                meeting_sessions[session_id] = {
+                    'transcript': analysis['transcript'],
+                    'memory': ConversationBufferMemory(memory_key="chat_history", return_messages=True),
+                    'chat_history': []
+                }
+                print(f"Initialized chat session on-demand for: {session_id}")
+            else:
+                return jsonify({'error': 'Session not found. Please ensure the transcript is loaded properly.'}), 404
         
         if not question:
             return jsonify({'error': 'No question provided'}), 400
@@ -575,7 +900,8 @@ def chat_endpoint():
         })
         
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        print(f"Error in chat endpoint: {str(e)}")
+        return jsonify({'error': f'Chat service error: {str(e)}'}), 500
 
 @app.route('/api/chat/history/<session_id>', methods=['GET'])
 def get_chat_history(session_id):
@@ -636,6 +962,131 @@ def search_endpoint():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
+# Meeting Analysis API Endpoints
+@app.route('/api/transcribe', methods=['POST'])
+@require_admin_auth
+def transcribe_endpoint():
+    """Endpoint for transcribing audio files (requires admin authentication)"""
+    try:
+        if 'audio' not in request.files:
+            return jsonify({'error': 'No audio file provided'}), 400
+        
+        audio_file = request.files['audio']
+        if audio_file.filename == '':
+            return jsonify({'error': 'No file selected'}), 400
+        
+        # Secure the filename
+        filename = secure_filename(audio_file.filename)
+        
+        # Save uploaded file temporarily
+        with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(filename)[1]) as tmp_file:
+            audio_file.save(tmp_file.name)
+            tmp_file_path = tmp_file.name
+        
+        # Get MIME type
+        mime_type = get_mime_type(filename, audio_file.content_type)
+        
+        # Transcribe
+        transcript = transcribe_audio(tmp_file_path, mime_type)
+        os.remove(tmp_file_path)
+        
+        if transcript and not transcript.startswith("Error:"):
+            # Generate meeting analysis
+            takeaways = generate_meeting_takeaways(transcript)
+            summary = generate_meeting_summary(transcript)
+            notes = generate_meeting_notes(transcript)
+            
+            # Parse chapters
+            chapters = parse_chapter_transcript(transcript)
+            
+            # Create a session ID for this meeting
+            session_id = str(uuid.uuid4())
+            meeting_sessions[session_id] = {
+                'transcript': transcript,
+                'memory': ConversationBufferMemory(memory_key="chat_history", return_messages=True),
+                'chat_history': []
+            }
+            
+            return jsonify({
+                'success': True,
+                'session_id': session_id,
+                'transcript': transcript,
+                'chapters': chapters,
+                'takeaways': takeaways,
+                'summary': summary,
+                'notes': notes,
+                'filename': filename
+            })
+        else:
+            return jsonify({'error': transcript or 'Transcription failed'}), 500
+            
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/sessions/<session_id>/meeting-analysis', methods=['POST'])
+@require_admin_auth
+def save_meeting_analysis(session_id):
+    """Save complete meeting analysis for a session (requires admin authentication)"""
+    try:
+        data = request.get_json()
+        analysis_data = data.get('analysis')
+        owner_id = data.get('owner_id')
+        
+        if not analysis_data:
+            return jsonify({'error': 'Analysis data is required'}), 400
+        
+        success = transcription_manager.save_meeting_analysis(session_id, analysis_data, owner_id)
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'Meeting analysis saved successfully'
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Failed to save meeting analysis - session not found or access denied'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@app.route('/api/sessions/<session_id>/meeting-analysis', methods=['GET'])
+def get_meeting_analysis(session_id):
+    """Get complete meeting analysis for a session"""
+    try:
+        owner_id = request.args.get('owner_id')
+        analysis = transcription_manager.get_meeting_analysis(session_id, owner_id)
+        
+        if analysis:
+            # Initialize chat session if not already present
+            if session_id not in meeting_sessions and 'transcript' in analysis:
+                meeting_sessions[session_id] = {
+                    'transcript': analysis['transcript'],
+                    'memory': ConversationBufferMemory(memory_key="chat_history", return_messages=True),
+                    'chat_history': []
+                }
+                print(f"Initialized chat session for saved transcript: {session_id}")
+            
+            return jsonify({
+                'success': True,
+                'analysis': analysis
+            })
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Analysis not found or access denied'
+            }), 404
+            
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
 # =============================================================================
 # SocketIO Event Handlers
 # =============================================================================
@@ -667,20 +1118,81 @@ def handle_join_session(data):
     """Handle client joining a transcription session"""
     try:
         session_id = data.get('session_id')
+        owner_id = data.get('owner_id')  # Optional owner identification
         client_id = getattr(request, 'sid', 'unknown')
+        
         if session_id:
             join_room(f"session_{session_id}")
-            emit('joined_session', {
-                'session_id': session_id,
-                'message': f'Joined session {session_id}'
-            })
-            print(f'Client {client_id} joined session {session_id}')
+            
+            # If owner_id is provided, update owner connection status
+            if owner_id:
+                transcription_manager.set_owner_connection_status(session_id, owner_id, True)
+                emit('joined_session', {
+                    'session_id': session_id,
+                    'owner_id': owner_id,
+                    'is_owner': True,
+                    'message': f'Joined session {session_id} as owner'
+                })
+                print(f'Owner {owner_id} joined session {session_id}')
+            else:
+                emit('joined_session', {
+                    'session_id': session_id,
+                    'message': f'Joined session {session_id}'
+                })
+                print(f'Client {client_id} joined session {session_id}')
         else:
             emit('error', {'message': 'Session ID is required'})
     except Exception as e:
         print(f'Error in join_session handler: {e}')
         try:
             emit('error', {'message': f'Error joining session: {str(e)}'})
+        except:
+            pass
+
+@socketio.on('join_session_as_owner')
+def handle_join_session_as_owner(data):
+    """Handle owner joining/resuming a transcription session"""
+    try:
+        session_id = data.get('session_id')
+        owner_id = data.get('owner_id')
+        client_id = getattr(request, 'sid', 'unknown')
+        
+        if not session_id or not owner_id:
+            emit('error', {'message': 'Session ID and owner ID are required'})
+            return
+        
+        # Verify ownership and join session
+        session_state = transcription_manager.get_session_state(session_id, owner_id)
+        if session_state:
+            join_room(f"session_{session_id}")
+            
+            # Update owner connection status
+            transcription_manager.set_owner_connection_status(session_id, owner_id, True)
+            
+            # Send current session state to the owner
+            emit('session_resumed', {
+                'session_id': session_id,
+                'owner_id': owner_id,
+                'session_state': session_state,
+                'message': f'Resumed session {session_id} as owner'
+            })
+            
+            # Send current transcript if available
+            transcript = transcription_manager.get_session_transcript(session_id)
+            if transcript:
+                emit('current_transcript', {
+                    'session_id': session_id,
+                    'transcript': transcript
+                })
+            
+            print(f'Owner {owner_id} resumed session {session_id}')
+        else:
+            emit('error', {'message': 'Session not found or access denied'})
+            
+    except Exception as e:
+        print(f'Error in join_session_as_owner handler: {e}')
+        try:
+            emit('error', {'message': f'Error joining session as owner: {str(e)}'})
         except:
             pass
 
@@ -725,18 +1237,70 @@ def handle_leave_session(data):
     """Handle client leaving a transcription session"""
     try:
         session_id = data.get('session_id')
+        owner_id = data.get('owner_id')  # Optional owner identification
         client_id = getattr(request, 'sid', 'unknown')
+        
         if session_id:
             leave_room(f"session_{session_id}")
-            emit('left_session', {
-                'session_id': session_id,
-                'message': f'Left session {session_id}'
-            })
-            print(f'Client {client_id} left session {session_id}')
+            
+            # If owner_id is provided, update owner connection status
+            if owner_id:
+                transcription_manager.set_owner_connection_status(session_id, owner_id, False)
+                emit('left_session', {
+                    'session_id': session_id,
+                    'owner_id': owner_id,
+                    'is_owner': True,
+                    'message': f'Left session {session_id} as owner'
+                })
+                print(f'Owner {owner_id} left session {session_id}')
+            else:
+                emit('left_session', {
+                    'session_id': session_id,
+                    'message': f'Left session {session_id}'
+                })
+                print(f'Client {client_id} left session {session_id}')
+        else:
+            emit('error', {'message': 'Session ID is required'})
     except Exception as e:
         print(f'Error in leave_session handler: {e}')
         try:
             emit('error', {'message': f'Error leaving session: {str(e)}'})
+        except:
+            pass
+
+@socketio.on('get_session_state')
+def handle_get_session_state(data):
+    """Handle request for session state"""
+    try:
+        session_id = data.get('session_id')
+        owner_id = data.get('owner_id')
+        
+        if not session_id:
+            try:
+                emit('error', {'message': 'Session ID is required'})
+            except:
+                pass
+            return
+        
+        session_state = transcription_manager.get_session_state(session_id, owner_id)
+        if session_state:
+            try:
+                emit('session_state', {
+                    'session_id': session_id,
+                    'session_state': session_state
+                })
+            except:
+                pass
+        else:
+            try:
+                emit('error', {'message': 'Session not found or access denied'})
+            except:
+                pass
+            
+    except Exception as e:
+        print(f"Error getting session state: {e}")
+        try:
+            emit('error', {'message': f'Error getting session state: {str(e)}'})
         except:
             pass
 

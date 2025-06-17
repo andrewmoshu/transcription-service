@@ -13,6 +13,22 @@
           </div>
           <h1 class="app-title">Meeting Transcriber</h1>
           <p class="app-subtitle">Powered by Eliza</p>
+          
+                      <!-- Auth Status -->
+            <div class="auth-status">
+              <div *ngIf="isAuthenticated" class="auth-indicator">
+                <mat-icon class="auth-icon">admin_panel_settings</mat-icon>
+                <span>Admin Mode</span>
+                <button mat-icon-button (click)="logout()" matTooltip="Logout" class="logout-button">
+                  <mat-icon>logout</mat-icon>
+                </button>
+              </div>
+              
+              <button mat-stroked-button *ngIf="!isAuthenticated" (click)="showAuthDialog()" class="auth-button">
+                <mat-icon>lock</mat-icon>
+                Admin Login
+              </button>
+            </div>
         </div>
 
         <!-- Mode Selection Cards -->
@@ -44,6 +60,20 @@
               <span class="feature">• Instant download</span>
             </div>
           </div>
+
+          <div class="mode-card" (click)="selectMode('transcripts')" [class.selected]="false">
+            <div class="mode-icon-wrapper">
+              <div class="mode-icon-bg"></div>
+              <mat-icon class="mode-icon">history</mat-icon>
+            </div>
+            <h3>My Transcripts</h3>
+            <p>View and manage all your saved transcripts and summaries from previous sessions</p>
+            <div class="mode-features">
+              <span class="feature">• Session history</span>
+              <span class="feature">• Saved summaries</span>
+              <span class="feature">• Quick access</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -70,6 +100,16 @@
       <app-live-transcription 
         (switchToMeetingAnalyzer)="switchToMeetingAnalyzer()">
       </app-live-transcription>
+    </div>
+
+    <!-- Transcripts View Mode -->
+    <div class="mode-view" *ngIf="selectedMode === 'transcripts'">
+      <div class="back-button-container">
+        <button mat-icon-button (click)="goBack()" class="back-button">
+          <mat-icon>arrow_back</mat-icon>
+        </button>
+      </div>
+      <app-transcript-list (switchToMeetingAnalyzer)="switchToMeetingAnalyzerFromTranscripts()"></app-transcript-list>
     </div>
   </div>
 
