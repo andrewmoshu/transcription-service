@@ -1,0 +1,67 @@
+<div class="transcript-list-container">
+  <!-- Header -->
+  <div class="list-header">
+    <h1>Public Transcript Library</h1>
+    <p class="subtitle">Browse and view all recorded transcripts</p>
+  </div>
+
+  <!-- Loading State -->
+  <div class="loading-state" *ngIf="isLoading">
+    <mat-spinner diameter="40"></mat-spinner>
+    <p>Loading transcripts...</p>
+  </div>
+
+  <!-- Empty State -->
+  <div class="empty-state" *ngIf="!isLoading && transcripts.length === 0">
+    <mat-icon>history</mat-icon>
+    <h2>No Transcripts Yet</h2>
+    <p>No transcripts have been created yet. Start a live transcription session to add the first one!</p>
+  </div>
+
+  <!-- Transcript List -->
+  <div class="transcript-grid" *ngIf="!isLoading && transcripts.length > 0">
+    <mat-card class="transcript-card" *ngFor="let transcript of transcripts" [class.owned-transcript]="transcript.is_owner">
+      <mat-card-header>
+        <mat-card-title>{{transcript.title}}</mat-card-title>
+        <mat-card-subtitle>
+          <span class="date">{{transcript.created_at | date:'medium'}}</span>
+        </mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <div class="transcript-info">
+          <div class="info-row">
+            <mat-icon>schedule</mat-icon>
+            <span>Duration: {{formatDuration(transcript.duration)}}</span>
+          </div>
+          
+          <div class="info-row" *ngIf="transcript.is_owner">
+            <mat-icon>person</mat-icon>
+            <span>Your transcript</span>
+          </div>
+
+          <div class="info-row" *ngIf="transcript.has_summary">
+            <mat-icon>summarize</mat-icon>
+            <span>Summary available</span>
+          </div>
+        </div>
+
+        <div class="status-chips">
+          <mat-chip [color]="getStatusColor(transcript)" selected>
+            <mat-icon>{{getStatusIcon(transcript)}}</mat-icon>
+            {{getStatusText(transcript)}}
+          </mat-chip>
+        </div>
+      </mat-card-content>
+
+      <mat-card-actions>
+        <button mat-button (click)="viewTranscript(transcript)">
+          <mat-icon>visibility</mat-icon>
+          View
+        </button>
+        <span class="spacer"></span>
+        <span class="last-activity">Last activity: {{transcript.last_activity | date:'short'}}</span>
+      </mat-card-actions>
+    </mat-card>
+  </div>
+</div>

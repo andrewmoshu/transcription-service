@@ -1,0 +1,31 @@
+<h2 mat-dialog-title>{{ data.title || 'Admin Authentication Required' }}</h2>
+<mat-dialog-content>
+  <p>{{ data.message || 'Please enter the admin password to continue.' }}</p>
+  
+  <mat-form-field appearance="outline" class="full-width">
+    <mat-label>Admin Password</mat-label>
+    <input matInput 
+           type="password" 
+           [(ngModel)]="password" 
+           (keyup.enter)="onSubmit()"
+           [disabled]="isLoading"
+           autocomplete="current-password">
+    <mat-icon matSuffix>lock</mat-icon>
+  </mat-form-field>
+  
+  <mat-error *ngIf="errorMessage" class="error-message">
+    {{ errorMessage }}
+  </mat-error>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="onCancel()" [disabled]="isLoading">Cancel</button>
+  <button mat-raised-button 
+          color="primary" 
+          (click)="onSubmit()" 
+          [disabled]="!password || isLoading">
+    <mat-spinner *ngIf="isLoading" diameter="18" class="inline-spinner"></mat-spinner>
+    <span *ngIf="!isLoading">Authenticate</span>
+    <span *ngIf="isLoading">Authenticating...</span>
+  </button>
+</mat-dialog-actions> 

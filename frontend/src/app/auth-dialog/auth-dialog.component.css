@@ -1,0 +1,21 @@
+.full-width {
+  width: 100%;
+}
+
+.error-message {
+  margin-top: 8px;
+  font-size: 12px;
+}
+
+.inline-spinner {
+  display: inline-block;
+  margin-right: 8px;
+}
+
+mat-dialog-content {
+  min-width: 300px;
+}
+
+mat-dialog-actions {
+  padding-top: 16px;
+} 
