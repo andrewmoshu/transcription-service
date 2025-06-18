@@ -60,6 +60,12 @@ export class MeetingService {
     if (password) {
       formData.append('password', password);
     }
+    
+    // Add owner ID from localStorage
+    const ownerId = localStorage.getItem('live-transcription-owner-id');
+    if (ownerId) {
+      formData.append('owner_id', ownerId);
+    }
 
     return this.http.post<TranscriptionResponse>(
       `${this.apiUrl}/transcribe`,

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, Router } from '@angular/router';
 import { MatIconModule } from '@angular/material/icon';
@@ -10,6 +10,7 @@ import { MatDialogModule, MatDialog } from '@angular/material/dialog';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { Subscription } from 'rxjs';
 
 import { LiveTranscriptionComponent } from './live-transcription/live-transcription.component';
 import { MeetingAnalyzerComponent } from './meeting-analyzer/meeting-analyzer.component';
@@ -39,12 +40,16 @@ import { AuthDialogComponent } from './auth-dialog/auth-dialog.component';
   templateUrl: './app.component.html',
   styleUrls: ['./app.component.css']
 })
-export class AppComponent implements OnInit {
+export class AppComponent implements OnInit, OnDestroy {
   title = 'Meeting Transcriber';
-  selectedMode: 'file' | 'live' | 'transcripts' | null = null;
+  selectedMode: string | null = null;
   cameFromLiveTranscription = false;
   cameFromTranscripts = false;
   isAuthenticated = false;
+  private authSub?: Subscription;
+  
+  // Custom logo URL - set this to your logo path
+  logoUrl: string = '/logo.svg'; // This will load from frontend/public/logo.svg
 
   constructor(
     private router: Router,
@@ -52,7 +57,7 @@ export class AppComponent implements OnInit {
     private dialog: MatDialog
   ) {
     // Subscribe to authentication status
-    this.authService.isAuthenticated().subscribe(
+    this.authSub = this.authService.isAuthenticated().subscribe(
       authenticated => this.isAuthenticated = authenticated
     );
   }
@@ -121,5 +126,9 @@ export class AppComponent implements OnInit {
   logout(): void {
     this.authService.clearPassword();
     this.isAuthenticated = false;
+  }
+
+  ngOnDestroy() {
+    this.authSub?.unsubscribe();
   }
 }

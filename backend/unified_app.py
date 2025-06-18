@@ -11,6 +11,8 @@ import google.generativeai as genai
 from werkzeug.utils import secure_filename
 from langchain.memory import ConversationBufferMemory
 from functools import wraps
+import json
+from datetime import datetime
 
 # Import project modules
 from live_transcription import LiveTranscriptionManager
@@ -999,8 +1001,16 @@ def transcribe_endpoint():
             # Parse chapters
             chapters = parse_chapter_transcript(transcript)
             
-            # Create a session ID for this meeting
-            session_id = str(uuid.uuid4())
+            # Get owner_id from request
+            owner_id = request.form.get('owner_id', None)
+            if not owner_id:
+                # Generate a temporary owner ID if not provided
+                owner_id = f"file_upload_{int(time.time())}_{uuid.uuid4().hex[:8]}"
+            
+            # Create session in transcription manager - it returns the session_id
+            session_id, _ = transcription_manager.create_session(owner_id)
+            
+            # Store in meeting_sessions for chat functionality
             meeting_sessions[session_id] = {
                 'transcript': transcript,
                 'memory': ConversationBufferMemory(memory_key="chat_history", return_messages=True),

@@ -19,6 +19,7 @@ import { MeetingService, Chapter, TranscriptionResponse } from '../services/meet
 import { AuthService } from '../services/auth.service';
 import { AuthDialogComponent } from '../auth-dialog/auth-dialog.component';
 import { marked } from 'marked';
+import { LiveTranscriptionService } from '../services/live-transcription.service';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -88,11 +89,15 @@ export class MeetingAnalyzerComponent implements OnInit {
   // Live session tracking
   isLiveSessionAnalysis = false;
 
+  // Add owner ID tracking
+  ownerId: string | null = null;
+
   @Output() goBackToLiveTranscription = new EventEmitter<void>();
 
   constructor(
     private meetingService: MeetingService,
     private authService: AuthService,
+    private liveTranscriptionService: LiveTranscriptionService,
     private snackBar: MatSnackBar,
     private sanitizer: DomSanitizer,
     private dialog: MatDialog
@@ -105,6 +110,13 @@ export class MeetingAnalyzerComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    // Get or generate owner ID
+    this.ownerId = localStorage.getItem('live-transcription-owner-id');
+    if (!this.ownerId) {
+      this.ownerId = `owner_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      localStorage.setItem('live-transcription-owner-id', this.ownerId);
+    }
+
     // Check API health
     this.meetingService.checkHealth().subscribe({
       next: (response) => {
@@ -280,7 +292,42 @@ export class MeetingAnalyzerComponent implements OnInit {
     // Convert markdown to HTML
     this.formatContent();
     
-    this.showSuccess('Audio processed successfully!');
+    // Save the meeting analysis to transcript list
+    if (this.sessionId && this.ownerId) {
+      const analysisData = {
+        transcript: this.transcript,
+        chapters: this.chapters,
+        takeaways: this.takeaways,
+        summary: this.summary,
+        notes: this.notes,
+        filename: this.filename,
+        session_id: this.sessionId
+      };
+      
+      this.liveTranscriptionService.saveMeetingAnalysis(
+        this.sessionId,
+        analysisData,
+        this.ownerId
+      ).subscribe({
+        next: (saveResponse) => {
+          if (saveResponse.success) {
+            console.log('Meeting analysis saved to transcript list');
+            this.showSuccess('Audio processed and saved to your transcripts!');
+          } else {
+            console.error('Failed to save meeting analysis:', saveResponse.error);
+            this.showSuccess('Audio processed successfully!');
+          }
+        },
+        error: (error) => {
+          console.error('Error saving meeting analysis:', error);
+          // Still show success for processing even if save failed
+          this.showSuccess('Audio processed successfully!');
+        }
+      });
+    } else {
+      this.showSuccess('Audio processed successfully!');
+    }
+    
     this.selectedTabIndex = 0; // Switch to transcript tab
   }
 

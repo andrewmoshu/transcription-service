@@ -8,7 +8,9 @@
         <div class="app-header">
           <div class="logo-wrapper">
             <div class="logo-circle">
-              <mat-icon class="logo-icon">voice_chat</mat-icon>
+              <!-- Use custom logo if available, otherwise fallback to icon -->
+              <img *ngIf="logoUrl" [src]="logoUrl" alt="Logo" class="logo-image">
+              <mat-icon *ngIf="!logoUrl" class="logo-icon">voice_chat</mat-icon>
             </div>
           </div>
           <h1 class="app-title">Meeting Transcriber</h1>
